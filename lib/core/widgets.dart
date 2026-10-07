@@ -1,0 +1,79 @@
+import 'package:flutter/material.dart';
+
+import 'config.dart';
+
+String fixUrl(String? u) {
+  if (u == null || u.isEmpty) return '';
+  final raw = u.trim();
+  final base = Uri.tryParse(AppConfig.apiBase);
+  var uri = Uri.tryParse(raw);
+  if (base == null || uri == null) return raw;
+  // A phone cannot reach the development computer through its own localhost.
+  // Reuse the API host while preserving Laravel's /storage/... path.
+  if (uri.host == 'localhost' ||
+      uri.host == '127.0.0.1' ||
+      uri.host == '0.0.0.0') {
+    uri = Uri(
+      scheme: base.scheme,
+      userInfo: uri.userInfo,
+      host: base.host,
+      port: base.hasPort ? base.port : 0,
+      pathSegments: uri.pathSegments,
+      query: uri.hasQuery ? uri.query : null,
+      fragment: uri.hasFragment ? uri.fragment : null,
+    );
+  } else if (uri.scheme == 'http' && uri.host.contains('ngrok')) {
+    uri = uri.replace(scheme: 'https');
+  }
+  return uri.toString();
+}
+
+class NetImage extends StatelessWidget {
+  final String? url;
+  final double? height;
+  final double? width;
+  const NetImage(this.url, {super.key, this.height, this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final u = fixUrl(url);
+    final placeholder = Container(
+      height: height,
+      width: width,
+      color: Colors.brown.shade100,
+      alignment: Alignment.center,
+      child: const Text('☕', style: TextStyle(fontSize: 32)),
+    );
+    if (u.isEmpty) return placeholder;
+    return Image.network(
+      u,
+      height: height,
+      width: width,
+      fit: BoxFit.cover,
+      headers: const {'ngrok-skip-browser-warning': 'true'},
+      loadingBuilder: (context, child, progress) => progress == null
+          ? child
+          : Stack(
+              alignment: Alignment.center,
+              children: [
+                placeholder,
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    value: progress.expectedTotalBytes == null
+                        ? null
+                        : progress.cumulativeBytesLoaded /
+                              progress.expectedTotalBytes!,
+                  ),
+                ),
+              ],
+            ),
+      errorBuilder: (_, error, ___) {
+        debugPrint('Image load failed: $u | $error');
+        return placeholder;
+      },
+    );
+  }
+}
