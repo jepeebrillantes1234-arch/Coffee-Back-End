@@ -142,7 +142,7 @@ class Api {
     final r = await _call('GET', '/products',
         auth: false,
         query: {
-          if (categoryId != null) 'category_id': categoryId,
+          'category_id': ?categoryId,
           if (search != null && search.isNotEmpty) 'search': search,
         });
     final page = Map<String, dynamic>.from(_d(r) as Map);

@@ -129,7 +129,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
               ),
               ValueListenableBuilder<Position?>(
                 valueListenable: LocationService.I.position,
-                builder: (_, pos, __) => MarkerLayer(markers: [
+                builder: (_, pos, _) => MarkerLayer(markers: [
                   Marker(point: shop, width: 40, height: 40, child: const Text('â˜•', style: TextStyle(fontSize: 28))),
                   if (cust != null) Marker(point: cust, width: 40, height: 40, child: const Text('ðŸ ', style: TextStyle(fontSize: 28))),
                   if (pos != null) Marker(point: LatLng(pos.latitude, pos.longitude), width: 40, height: 40, child: const Text('ðŸ›µ', style: TextStyle(fontSize: 28))),
@@ -144,9 +144,9 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
       // GPS status
       ValueListenableBuilder<bool>(
         valueListenable: LocationService.I.tracking,
-        builder: (_, on, __) => ValueListenableBuilder<String?>(
+        builder: (_, on, _) => ValueListenableBuilder<String?>(
           valueListenable: LocationService.I.error,
-          builder: (_, err, __) => Text(
+          builder: (_, err, _) => Text(
             err != null ? 'âš ï¸ $err' : (on ? 'ðŸ“¡ Nagpapadala ng GPS tuwing 5 segundo' : 'GPS: hindi pa nagsisimula'),
             style: TextStyle(color: err != null ? Colors.red : (on ? success : Colors.black54), fontSize: 13),
           ),

@@ -24,7 +24,7 @@ class RootScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: rootTab,
-      builder: (_, tab, __) => Scaffold(
+      builder: (_, tab, _) => Scaffold(
         body: IndexedStack(index: tab, children: const [
           HomeScreen(),
           MenuScreen(),
@@ -55,7 +55,7 @@ class _BottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: Cart.I,
-      builder: (_, __) => Container(
+      builder: (_, _) => Container(
         color: const Color(0xFF140C0A),
         child: SafeArea(
           top: false,

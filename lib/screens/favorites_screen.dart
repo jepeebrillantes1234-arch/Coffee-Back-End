@@ -23,7 +23,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       appBar: AppBar(title: const Text('❤️ Mga Paborito')),
       body: ListenableBuilder(
         listenable: Favorites.I,
-        builder: (_, __) {
+        builder: (_, _) {
           final items = Favorites.I.items;
           if (items.isEmpty) {
             return const Center(child: Text('Wala ka pang paboritong kape.\nI-tap ang ♡ sa menu.', textAlign: TextAlign.center));

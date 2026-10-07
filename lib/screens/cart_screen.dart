@@ -16,7 +16,7 @@ class CartScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('Cart')),
       body: ListenableBuilder(
         listenable: Cart.I,
-        builder: (_, __) {
+        builder: (_, _) {
           final lines = Cart.I.lines;
           if (lines.isEmpty) {
             return const Center(child: Text('Walang laman ang cart.\nMag-order ng kape sa Menu ☕', textAlign: TextAlign.center));
@@ -86,7 +86,7 @@ class _PromoNote extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListenableBuilder(
       listenable: SelectedPromo.I,
-      builder: (_, __) {
+      builder: (_, _) {
         final p = SelectedPromo.I.promo;
         if (p == null) return const SizedBox.shrink();
         final prod = p['product'] is Map ? (p['product'] as Map)['name'] : null;

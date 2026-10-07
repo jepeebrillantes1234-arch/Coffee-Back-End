@@ -177,7 +177,7 @@ class _ProductScreenState extends State<ProductScreen> {
   Widget _promoTag(Map<String, dynamic> p) {
     return ListenableBuilder(
       listenable: SelectedPromo.I,
-      builder: (_, __) {
+      builder: (_, _) {
         final sp = SelectedPromo.I.promo;
         if (sp == null) return const SizedBox.shrink();
         final pid = SelectedPromo.I.productId;

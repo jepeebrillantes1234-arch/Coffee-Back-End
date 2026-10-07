@@ -149,7 +149,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final shopPt = (dbl(shop['lat']) == 0 && dbl(shop['lng']) == 0) ? null : pt(shop);
     final riderPt = rider == null ? null : pt(rider);
 
-    final points = <LatLng>[if (destPt != null) destPt, if (riderPt != null) riderPt, if (shopPt != null) shopPt];
+    final points = <LatLng>[?destPt, ?riderPt, ?shopPt];
 
     return ListView(padding: const EdgeInsets.all(14), children: [
       Container(

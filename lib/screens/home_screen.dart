@@ -368,7 +368,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListenableBuilder(
       listenable: SelectedPromo.I,
-      builder: (_, __) {
+      builder: (_, _) {
         final selected = SelectedPromo.I.code == p['code'];
         return _slideCard(
           title: (p['title'] ?? '').toString(),
@@ -603,7 +603,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 right: 0,
                 child: ListenableBuilder(
                   listenable: Favorites.I,
-                  builder: (_, __) {
+                  builder: (_, _) {
                     final fav = Favorites.I.has(p['id'] as int);
                     return GestureDetector(
                       onTap: () => Favorites.I.toggle(p),

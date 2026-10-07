@@ -208,7 +208,7 @@ Widget productCard(BuildContext context, Map<String, dynamic> p) {
               right: 4,
               child: ListenableBuilder(
                 listenable: Favorites.I,
-                builder: (_, __) {
+                builder: (_, _) {
                   final fav = Favorites.I.has(p['id'] as int);
                   return Material(
                     color: Colors.white.withValues(alpha: 0.85),

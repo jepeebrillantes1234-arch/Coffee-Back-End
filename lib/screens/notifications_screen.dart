@@ -59,7 +59,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ])
                   : ListView.separated(
                       itemCount: _items.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (_, i) {
                         final n = _items[i];
                         final orderId = (n['data'] is Map) ? (n['data']['order_id'] as num?)?.toInt() : null;

@@ -82,7 +82,7 @@ class _PromoCarouselState extends State<PromoCarousel> with SingleTickerProvider
         const SizedBox(height: 8),
         AnimatedBuilder(
           animation: _ctrl,
-          builder: (_, __) => Row(children: [
+          builder: (_, _) => Row(children: [
             for (var i = 0; i < _n; i++)
               Expanded(
                 child: Container(

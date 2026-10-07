@@ -110,7 +110,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           actions: [
             Row(children: [
               Text(_available ? 'Online' : 'Offline', style: const TextStyle(fontSize: 12)),
-              Switch(value: _available, activeColor: success, onChanged: _toggleAvailable),
+              Switch(value: _available, activeThumbColor: success, onChanged: _toggleAvailable),
             ]),
             IconButton(icon: const Icon(Icons.logout), onPressed: _logout),
           ],
@@ -128,7 +128,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   Container(width: double.infinity, color: Colors.red.shade50, padding: const EdgeInsets.all(10), child: Text(_error!, style: const TextStyle(color: Colors.red))),
                 ValueListenableBuilder<bool>(
                   valueListenable: LocationService.I.tracking,
-                  builder: (_, on, __) => on
+                  builder: (_, on, _) => on
                       ? Container(
                           width: double.infinity,
                           color: success,

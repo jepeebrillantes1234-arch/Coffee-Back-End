@@ -70,7 +70,7 @@ class NetImage extends StatelessWidget {
                 ),
               ],
             ),
-      errorBuilder: (_, error, ___) {
+      errorBuilder: (_, error, _) {
         debugPrint('Image load failed: $u | $error');
         return placeholder;
       },

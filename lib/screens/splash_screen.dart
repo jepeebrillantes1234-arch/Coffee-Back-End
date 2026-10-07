@@ -40,7 +40,7 @@ class _SplashScreenState extends State<SplashScreen> {
           Image.asset(
             'assets/images/splash.png',
             fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const ColoredBox(color: Color(0xFF32190F)),
+            errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFF32190F)),
           ),
           const DecoratedBox(
             decoration: BoxDecoration(
