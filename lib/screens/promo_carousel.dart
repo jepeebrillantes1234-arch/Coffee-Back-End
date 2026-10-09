@@ -7,15 +7,23 @@ import 'package:flutter/material.dart';
 class PromoCarousel extends StatefulWidget {
   final List<Widget> slides;
   final Duration interval;
-  const PromoCarousel({super.key, required this.slides, this.interval = const Duration(seconds: 5)});
+  const PromoCarousel({
+    super.key,
+    required this.slides,
+    this.interval = const Duration(seconds: 5),
+  });
 
   @override
   State<PromoCarousel> createState() => _PromoCarouselState();
 }
 
-class _PromoCarouselState extends State<PromoCarousel> with SingleTickerProviderStateMixin {
+class _PromoCarouselState extends State<PromoCarousel>
+    with SingleTickerProviderStateMixin {
   final PageController _page = PageController();
-  late final AnimationController _ctrl = AnimationController(vsync: this, duration: widget.interval);
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: widget.interval,
+  );
   int _index = 0;
 
   int get _n => widget.slides.length;
@@ -53,52 +61,70 @@ class _PromoCarouselState extends State<PromoCarousel> with SingleTickerProvider
 
   void _next() {
     if (_n <= 1 || !_page.hasClients) return;
-    _page.animateToPage((_index + 1) % _n, duration: const Duration(milliseconds: 380), curve: Curves.easeInOut);
+    _page.animateToPage(
+      (_index + 1) % _n,
+      duration: const Duration(milliseconds: 380),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      Expanded(
-        child: Listener(
-          onPointerDown: (_) => _ctrl.stop(),
-          onPointerUp: (_) {
-            if (_n > 1) _ctrl.forward();
-          },
-          onPointerCancel: (_) {
-            if (_n > 1) _ctrl.forward();
-          },
-          child: PageView(
-            controller: _page,
-            onPageChanged: (i) {
-              setState(() => _index = i);
-              if (_n > 1) _ctrl.forward(from: 0);
+    return Column(
+      children: [
+        Expanded(
+          child: Listener(
+            onPointerDown: (_) => _ctrl.stop(),
+            onPointerUp: (_) {
+              if (_n > 1) _ctrl.forward();
             },
-            children: widget.slides,
+            onPointerCancel: (_) {
+              if (_n > 1) _ctrl.forward();
+            },
+            child: PageView(
+              controller: _page,
+              onPageChanged: (i) {
+                setState(() => _index = i);
+                if (_n > 1) _ctrl.forward(from: 0);
+              },
+              children: widget.slides,
+            ),
           ),
         ),
-      ),
-      if (_n > 1) ...[
-        const SizedBox(height: 8),
-        AnimatedBuilder(
-          animation: _ctrl,
-          builder: (_, _) => Row(children: [
-            for (var i = 0; i < _n; i++)
-              Expanded(
-                child: Container(
-                  height: 4,
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  decoration: BoxDecoration(color: Colors.white30, borderRadius: BorderRadius.circular(4)),
-                  child: FractionallySizedBox(
-                    alignment: Alignment.centerLeft,
-                    widthFactor: i < _index ? 1 : (i == _index ? _ctrl.value : 0),
-                    child: Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+        if (_n > 1) ...[
+          const SizedBox(height: 8),
+          AnimatedBuilder(
+            animation: _ctrl,
+            builder: (_, _) => Row(
+              children: [
+                for (var i = 0; i < _n; i++)
+                  Expanded(
+                    child: Container(
+                      height: 4,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0x55877A70),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: i < _index
+                            ? 1
+                            : (i == _index ? _ctrl.value : 0),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4B2E25),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-          ]),
-        ),
+              ],
+            ),
+          ),
+        ],
       ],
-    ]);
+    );
   }
 }

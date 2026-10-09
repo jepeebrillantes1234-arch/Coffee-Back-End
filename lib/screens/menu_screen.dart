@@ -1,15 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../core/api.dart';
+import '../core/animated_add_button.dart';
 import '../core/theme.dart';
 import '../core/util.dart';
 import '../core/widgets.dart';
 import '../state/favorites.dart';
 import '../state/nav.dart';
-import 'favorites_screen.dart';
-import 'notifications_screen.dart';
 import 'product_screen.dart';
 
 class MenuScreen extends StatefulWidget {
@@ -26,16 +23,12 @@ class _MenuScreenState extends State<MenuScreen> {
   final _search = TextEditingController();
   bool _loading = true;
   String? _error;
-  int _unread = 0;
-  Timer? _bell;
 
   @override
   void initState() {
     super.initState();
     _init();
     Favorites.I.load();
-    _loadUnread();
-    _bell = Timer.periodic(const Duration(seconds: 20), (_) => _loadUnread());
     menuRequest.addListener(_onRequest);
   }
 
@@ -52,22 +45,20 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void dispose() {
     menuRequest.removeListener(_onRequest);
-    _bell?.cancel();
     _search.dispose();
     super.dispose();
-  }
-
-  Future<void> _loadUnread() async {
-    try {
-      final n = await Api.I.notifications();
-      if (mounted) setState(() => _unread = (n['unread'] as num?)?.toInt() ?? 0);
-    } catch (_) {}
   }
 
   Future<void> _init() async {
     try {
       final c = await Api.I.categories();
-      if (mounted) setState(() => _cats = c);
+      if (mounted) {
+        setState(() {
+          _cats = c;
+          if (_cat == null && c.isNotEmpty)
+            _cat = (c.first['id'] as num).toInt();
+        });
+      }
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     }
@@ -77,7 +68,10 @@ class _MenuScreenState extends State<MenuScreen> {
   Future<void> _loadProducts() async {
     if (mounted) setState(() => _loading = true);
     try {
-      final p = await Api.I.products(categoryId: _cat, search: _search.text.trim());
+      final p = await Api.I.products(
+        categoryId: _cat,
+        search: _search.text.trim(),
+      );
       if (!mounted) return;
       setState(() {
         _products = p;
@@ -96,97 +90,176 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Menu'),
-        actions: [
-          IconButton(
-            tooltip: 'Favorites',
-            icon: const Icon(Icons.favorite_border),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FavoritesScreen())),
+        backgroundColor: Colors.white,
+        foregroundColor: espresso,
+        centerTitle: true,
+        automaticallyImplyLeading: false,
+        title: const Text(
+          'Menu',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
           ),
-          IconButton(
-            tooltip: 'Notifications',
-            icon: Badge(isLabelVisible: _unread > 0, label: Text('$_unread'), child: const Icon(Icons.notifications_none)),
-            onPressed: () async {
-              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
-              _loadUnread();
-            },
+        ),
+        leading: IconButton(
+          tooltip: 'Back to home',
+          onPressed: () => rootTab.value = 0,
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            size: 20,
+            color: Color(0xFF242424),
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          SizedBox(
+            height: 56,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+              children: [
+                for (final category in _cats)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text('${category['name']}'),
+                      selected: _cat == category['id'],
+                      onSelected: (_) {
+                        setState(() => _cat = (category['id'] as num).toInt());
+                        _loadProducts();
+                      },
+                      showCheckmark: false,
+                      labelStyle: TextStyle(
+                        color: _cat == category['id']
+                            ? Colors.white
+                            : const Color(0xFF222222),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      selectedColor: espresso,
+                      backgroundColor: const Color(0xFFF6F5F3),
+                      shape: const StadiumBorder(),
+                      side: BorderSide.none,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 4,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: Text(_error!, style: const TextStyle(color: Colors.red)),
+            ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadProducts,
+                    child: _products.isEmpty
+                        ? ListView(
+                            children: const [
+                              SizedBox(height: 120),
+                              Center(child: Text('Walang nahanap na product.')),
+                            ],
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 6, 16, 20),
+                            itemCount: _products.length,
+                            separatorBuilder: (_, _) => const Divider(
+                              height: 1,
+                              indent: 84,
+                              color: Color(0xFFF0EFED),
+                            ),
+                            itemBuilder: (_, index) =>
+                                _menuRow(_products[index]),
+                          ),
+                  ),
           ),
         ],
       ),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-          child: TextField(
-            controller: _search,
-            textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _loadProducts(),
-            decoration: InputDecoration(
-              hintText: 'Hanapin ang kape...',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: () {
-                  _search.clear();
-                  _loadProducts();
-                },
+    );
+  }
+
+  Widget _menuRow(Map<String, dynamic> product) {
+    final description = (product['description'] ?? '').toString().trim();
+    return InkWell(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ProductScreen(id: (product['id'] as num).toInt()),
+        ),
+      ),
+      child: SizedBox(
+        height: 92,
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                width: 68,
+                height: 68,
+                child: NetImage(product['image_url']?.toString()),
               ),
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
             ),
-          ),
-        ),
-        SizedBox(
-          height: 52,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: const Text('Lahat'),
-                  selected: _cat == null,
-                  onSelected: (_) {
-                    setState(() => _cat = null);
-                    _loadProducts();
-                  },
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${product['name']}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF202020),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  if (description.isNotEmpty)
+                    Text(
+                      description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF888888),
+                      ),
+                    ),
+                  const SizedBox(height: 5),
+                  Text(
+                    peso(dbl(product['base_price'])),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            AnimatedAddButton(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ProductScreen(id: (product['id'] as num).toInt()),
                 ),
               ),
-              for (final c in _cats)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text('${c['name']}'),
-                    selected: _cat == c['id'],
-                    onSelected: (_) {
-                      setState(() => _cat = c['id'] as int);
-                      _loadProducts();
-                    },
-                  ),
-                ),
-            ],
-          ),
+              size: 29,
+            ),
+          ],
         ),
-        if (_error != null) Padding(padding: const EdgeInsets.all(12), child: Text(_error!, style: const TextStyle(color: Colors.red))),
-        Expanded(
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : RefreshIndicator(
-                  onRefresh: _loadProducts,
-                  child: _products.isEmpty
-                      ? ListView(children: const [SizedBox(height: 120), Center(child: Text('Walang nahanap na product.'))])
-                      : GridView.builder(
-                          padding: const EdgeInsets.all(12),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 12, mainAxisSpacing: 12),
-                          itemCount: _products.length,
-                          itemBuilder: (_, i) => productCard(context, _products[i]),
-                        ),
-                ),
-        ),
-      ]),
+      ),
     );
   }
 }
@@ -195,51 +268,86 @@ class _MenuScreenState extends State<MenuScreen> {
 Widget productCard(BuildContext context, Map<String, dynamic> p) {
   return InkWell(
     borderRadius: BorderRadius.circular(16),
-    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProductScreen(id: p['id'] as int))),
+    onTap: () => Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ProductScreen(id: p['id'] as int)),
+    ),
     child: Card(
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(
-          child: Stack(fit: StackFit.expand, children: [
-            NetImage(p['image_url']?.toString()),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: ListenableBuilder(
-                listenable: Favorites.I,
-                builder: (_, _) {
-                  final fav = Favorites.I.has(p['id'] as int);
-                  return Material(
-                    color: Colors.white.withValues(alpha: 0.85),
-                    shape: const CircleBorder(),
-                    child: InkWell(
-                      customBorder: const CircleBorder(),
-                      onTap: () => Favorites.I.toggle(p),
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Icon(fav ? Icons.favorite : Icons.favorite_border, size: 20, color: fav ? Colors.red : espresso),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                NetImage(p['image_url']?.toString()),
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: ListenableBuilder(
+                    listenable: Favorites.I,
+                    builder: (_, _) {
+                      final fav = Favorites.I.has(p['id'] as int);
+                      return Material(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        shape: const CircleBorder(),
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => Favorites.I.toggle(p),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Icon(
+                              fav ? Icons.favorite : Icons.favorite_border,
+                              size: 20,
+                              color: fav ? Colors.red : espresso,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${p['name']}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      peso(dbl(p['base_price'])),
+                      style: const TextStyle(
+                        color: caramel,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                  );
-                },
-              ),
+                    if (dbl(p['avg_rating']) > 0)
+                      Text(
+                        '★ ${dbl(p['avg_rating']).toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
             ),
-          ]),
-        ),
-        Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('${p['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(peso(dbl(p['base_price'])), style: const TextStyle(color: caramel, fontWeight: FontWeight.w700)),
-              if (dbl(p['avg_rating']) > 0)
-                Text('★ ${dbl(p['avg_rating']).toStringAsFixed(1)}', style: const TextStyle(fontSize: 12, color: Colors.amber)),
-            ]),
-          ]),
-        ),
-      ]),
+          ),
+        ],
+      ),
     ),
   );
 }

@@ -9,7 +9,8 @@ import '../state/promo_state.dart';
 
 class ProductScreen extends StatefulWidget {
   final int id;
-  const ProductScreen({super.key, required this.id});
+  final int? cartIndex;
+  const ProductScreen({super.key, required this.id, this.cartIndex});
 
   @override
   State<ProductScreen> createState() => _ProductScreenState();
@@ -24,7 +25,8 @@ class _ProductScreenState extends State<ProductScreen> {
   Map<String, dynamic>? _reviews;
   final _notes = TextEditingController();
 
-  List<Map<String, dynamic>> get _groups => _p == null ? [] : mapList(_p!['option_groups'] ?? []);
+  List<Map<String, dynamic>> get _groups =>
+      _p == null ? [] : mapList(_p!['option_groups'] ?? []);
 
   @override
   void initState() {
@@ -42,22 +44,42 @@ class _ProductScreenState extends State<ProductScreen> {
     try {
       final p = await Api.I.product(widget.id);
       if (!mounted) return;
-      Api.I.productReviews(widget.id).then((r) {
-        if (mounted) setState(() => _reviews = r);
-      }).catchError((_) {});
+      Api.I
+          .productReviews(widget.id)
+          .then((r) {
+            if (mounted) setState(() => _reviews = r);
+          })
+          .catchError((_) {});
+      final existing =
+          widget.cartIndex != null && widget.cartIndex! < Cart.I.lines.length
+          ? Cart.I.lines[widget.cartIndex!]
+          : null;
       setState(() {
         _p = p;
         _loading = false;
-        // Buy X Get Y: ilagay agad ang kailangang dami
-        if (SelectedPromo.I.isBogo && SelectedPromo.I.productId == (p['id'] as num).toInt()) {
+        if (existing != null) {
+          _qty = existing.qty;
+          _notes.text = existing.notes ?? '';
+        } else if (SelectedPromo.I.isBogo &&
+            SelectedPromo.I.productId == (p['id'] as num).toInt()) {
           _qty = SelectedPromo.I.bogoNeed;
         }
-        // Paunang pili: unang option ng bawat required na single-choice group
         for (final g in _groups) {
           final opts = mapList(g['options'] ?? []);
-          _sel[g['id'] as int] = {};
-          if (g['is_required'] == true && g['is_multiple'] != true && opts.isNotEmpty) {
-            _sel[g['id'] as int]!.add(opts.first['id'] as int);
+          final selected = _sel[g['id'] as int] = <int>{};
+          if (existing != null) {
+            selected.addAll(
+              opts
+                  .where(
+                    (o) =>
+                        existing.optionIds.contains((o['id'] as num).toInt()),
+                  )
+                  .map((o) => (o['id'] as num).toInt()),
+            );
+          } else if (g['is_required'] == true &&
+              g['is_multiple'] != true &&
+              opts.isNotEmpty) {
+            selected.add((opts.first['id'] as num).toInt());
           }
         }
       });
@@ -80,7 +102,9 @@ class _ProductScreenState extends State<ProductScreen> {
     return out;
   }
 
-  double get _unit => dbl(_p?['base_price']) + _chosen.fold(0.0, (s, o) => s + dbl(o['extra_price']));
+  double get _unit =>
+      dbl(_p?['base_price']) +
+      _chosen.fold(0.0, (s, o) => s + dbl(o['extra_price']));
 
   void _toggle(Map<String, dynamic> g, Map<String, dynamic> o) {
     final gid = g['id'] as int;
@@ -93,7 +117,13 @@ class _ProductScreenState extends State<ProductScreen> {
         } else if (set.length < (g['max_select'] as int)) {
           set.add(oid);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hanggang ${g['max_select']} lang ang puwede sa ${g['name']}.')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Hanggang ${g['max_select']} lang ang puwede sa ${g['name']}.',
+              ),
+            ),
+          );
         }
       } else {
         set
@@ -107,22 +137,36 @@ class _ProductScreenState extends State<ProductScreen> {
   void _add() {
     for (final g in _groups) {
       if (g['is_required'] == true && (_sel[g['id'] as int] ?? {}).isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Pumili ng ${g['name']}.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Pumili ng ${g['name']}.')));
         return;
       }
     }
     final chosen = _chosen;
-    Cart.I.add(CartLine(
-      productId: _p!['id'] as int,
+    final line = CartLine(
+      productId: (_p!['id'] as num).toInt(),
       name: '${_p!['name']}',
       imageUrl: _p!['image_url']?.toString(),
       unitPrice: _unit,
-      optionIds: chosen.map((o) => o['id'] as int).toList(),
+      optionIds: chosen.map((o) => (o['id'] as num).toInt()).toList(),
       optionNames: chosen.map((o) => '${o['name']}').toList(),
       notes: _notes.text.trim().isEmpty ? null : _notes.text.trim(),
       qty: _qty,
-    ));
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Naidagdag sa cart')));
+    );
+    if (widget.cartIndex != null && widget.cartIndex! < Cart.I.lines.length) {
+      Cart.I.update(widget.cartIndex!, line);
+    } else {
+      Cart.I.add(line);
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          widget.cartIndex == null
+              ? 'Naidagdag sa cart'
+              : 'Na-update ang coffee',
+        ),
+      ),
+    );
     Navigator.of(context).pop();
   }
 
@@ -134,43 +178,97 @@ class _ProductScreenState extends State<ProductScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : p == null
-              ? Center(child: Text(_error ?? 'May error.'))
-              : Column(children: [
-                  Expanded(
-                    child: ListView(children: [
-                      SizedBox(height: 220, width: double.infinity, child: NetImage(p['image_url']?.toString())),
+          ? Center(child: Text(_error ?? 'May error.'))
+          : Column(
+              children: [
+                Expanded(
+                  child: ListView(
+                    children: [
+                      SizedBox(
+                        height: 220,
+                        width: double.infinity,
+                        child: NetImage(p['image_url']?.toString()),
+                      ),
                       Padding(
                         padding: const EdgeInsets.all(16),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('${p['name']}', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-                          if ((p['description'] ?? '').toString().isNotEmpty)
-                            Padding(padding: const EdgeInsets.only(top: 6), child: Text('${p['description']}', style: const TextStyle(color: Colors.black54))),
-                          const SizedBox(height: 16),
-                          _promoTag(p),
-                          for (final g in _groups) _group(g),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _notes,
-                            decoration: const InputDecoration(labelText: 'Note (opsyonal)', border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
-                          ),
-                          if (_reviews != null) _reviewsBox(),
-                        ]),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${p['name']}',
+                              style: const TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if ((p['description'] ?? '').toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  '${p['description']}',
+                                  style: const TextStyle(color: Colors.black54),
+                                ),
+                              ),
+                            const SizedBox(height: 16),
+                            _promoTag(p),
+                            for (final g in _groups) _group(g),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _notes,
+                              decoration: const InputDecoration(
+                                labelText: 'Note (opsyonal)',
+                                border: OutlineInputBorder(),
+                                filled: true,
+                                fillColor: Colors.white,
+                              ),
+                            ),
+                            if (_reviews != null) _reviewsBox(),
+                          ],
+                        ),
                       ),
-                    ]),
+                    ],
                   ),
-                  SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                      child: Row(children: [
-                        IconButton.outlined(onPressed: _qty > 1 ? () => setState(() => _qty--) : null, icon: const Icon(Icons.remove)),
-                        Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Text('$_qty', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600))),
-                        IconButton.outlined(onPressed: () => setState(() => _qty++), icon: const Icon(Icons.add)),
+                ),
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                    child: Row(
+                      children: [
+                        IconButton.outlined(
+                          onPressed: _qty > 1
+                              ? () => setState(() => _qty--)
+                              : null,
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Text(
+                            '$_qty',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        IconButton.outlined(
+                          onPressed: () => setState(() => _qty++),
+                          icon: const Icon(Icons.add),
+                        ),
                         const SizedBox(width: 12),
-                        Expanded(child: FilledButton(onPressed: _add, child: Text('Idagdag · ${peso(_unit * _qty)}'))),
-                      ]),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: _add,
+                            child: Text(
+                              '${widget.cartIndex == null ? 'Idagdag sa cart' : 'I-save ang pagbabago'} - ${peso(_unit * _qty)}',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ]),
+                ),
+              ],
+            ),
     );
   }
 
@@ -181,13 +279,14 @@ class _ProductScreenState extends State<ProductScreen> {
         final sp = SelectedPromo.I.promo;
         if (sp == null) return const SizedBox.shrink();
         final pid = SelectedPromo.I.productId;
-        if (pid != null && pid != (p['id'] as num).toInt()) return const SizedBox.shrink();
+        if (pid != null && pid != (p['id'] as num).toInt())
+          return const SizedBox.shrink();
 
         final text = pid == null
             ? '🎟 Promo ${sp['code']} ay awtomatikong gagamitin sa checkout.'
             : SelectedPromo.I.isBogo
-                ? '🎟 ${sp['headline'] ?? sp['code']}: nakalagay na ang ${SelectedPromo.I.bogoNeed} piraso. Awtomatiko ang diskwento sa checkout.'
-                : '🎟 ${sp['headline'] ?? sp['code']} sa produktong ito (1 piraso lang). Awtomatiko sa checkout.';
+            ? '🎟 ${sp['headline'] ?? sp['code']}: nakalagay na ang ${SelectedPromo.I.bogoNeed} piraso. Awtomatiko ang diskwento sa checkout.'
+            : '🎟 ${sp['headline'] ?? sp['code']} sa produktong ito (1 piraso lang). Awtomatiko sa checkout.';
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 14),
@@ -209,32 +308,68 @@ class _ProductScreenState extends State<ProductScreen> {
     final count = (r['count'] as num?)?.toInt() ?? 0;
     return Padding(
       padding: const EdgeInsets.only(top: 22),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(
-          count == 0 ? 'Mga Review' : 'Mga Review · ★ ${dbl(r['avg']).toStringAsFixed(1)} ($count)',
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-        ),
-        const SizedBox(height: 6),
-        if (items.isEmpty) const Text('Wala pang review.', style: TextStyle(color: Colors.black54)),
-        for (final it in items)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text('${it['name']}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 8),
-                  Text('★' * (it['rating'] as int), style: const TextStyle(color: Colors.amber)),
-                  const Spacer(),
-                  Text('${it['date']}', style: const TextStyle(fontSize: 11, color: Colors.black45)),
-                ]),
-                if ((it['comment'] ?? '').toString().isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text('${it['comment']}')),
-                if ((it['reply'] ?? '').toString().isNotEmpty)
-                  Padding(padding: const EdgeInsets.only(top: 6), child: Text('☕ Shop: ${it['reply']}', style: const TextStyle(fontSize: 12, color: caramel))),
-              ]),
-            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            count == 0
+                ? 'Mga Review'
+                : 'Mga Review · ★ ${dbl(r['avg']).toStringAsFixed(1)} ($count)',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
-      ]),
+          const SizedBox(height: 6),
+          if (items.isEmpty)
+            const Text(
+              'Wala pang review.',
+              style: TextStyle(color: Colors.black54),
+            ),
+          for (final it in items)
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '${it['name']}',
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '★' * (it['rating'] as int),
+                          style: const TextStyle(color: Colors.amber),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${it['date']}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.black45,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if ((it['comment'] ?? '').toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text('${it['comment']}'),
+                      ),
+                    if ((it['reply'] ?? '').toString().isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '☕ Shop: ${it['reply']}',
+                          style: const TextStyle(fontSize: 12, color: caramel),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -243,23 +378,46 @@ class _ProductScreenState extends State<ProductScreen> {
     final gid = g['id'] as int;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text('${g['name']}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
-          const SizedBox(width: 8),
-          Text(g['is_required'] == true ? 'Kailangan' : 'Opsyonal', style: TextStyle(fontSize: 12, color: g['is_required'] == true ? caramel : Colors.black45)),
-        ]),
-        const SizedBox(height: 6),
-        Wrap(spacing: 8, runSpacing: 4, children: [
-          for (final o in opts)
-            FilterChip(
-              label: Text('${o['name']}${dbl(o['extra_price']) > 0 ? '  +₱${dbl(o['extra_price']).toStringAsFixed(0)}' : ''}'),
-              selected: _sel[gid]?.contains(o['id'] as int) == true,
-              onSelected: (_) => _toggle(g, o),
-              selectedColor: caramel.withValues(alpha: 0.3),
-            ),
-        ]),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                '${g['name']}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                g['is_required'] == true ? 'Kailangan' : 'Opsyonal',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: g['is_required'] == true ? caramel : Colors.black45,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: [
+              for (final o in opts)
+                FilterChip(
+                  label: Text(
+                    '${o['name']}${dbl(o['extra_price']) > 0 ? '  +₱${dbl(o['extra_price']).toStringAsFixed(0)}' : ''}',
+                  ),
+                  selected: _sel[gid]?.contains(o['id'] as int) == true,
+                  onSelected: (_) => _toggle(g, o),
+                  selectedColor: caramel.withValues(alpha: 0.3),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

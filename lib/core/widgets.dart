@@ -32,7 +32,14 @@ class NetImage extends StatelessWidget {
   final String? url;
   final double? height;
   final double? width;
-  const NetImage(this.url, {super.key, this.height, this.width});
+  final BoxFit fit;
+  const NetImage(
+    this.url, {
+    super.key,
+    this.height,
+    this.width,
+    this.fit = BoxFit.cover,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +56,7 @@ class NetImage extends StatelessWidget {
       u,
       height: height,
       width: width,
-      fit: BoxFit.cover,
+      fit: fit,
       headers: const {'ngrok-skip-browser-warning': 'true'},
       loadingBuilder: (context, child, progress) => progress == null
           ? child

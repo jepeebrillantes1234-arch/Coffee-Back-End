@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -27,6 +27,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   int _rating = 5;
   final _comment = TextEditingController();
   bool _busy = false;
+  bool _showDetails = false;
 
   static const _final = ['completed', 'rejected', 'cancelled'];
 
@@ -73,10 +74,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('I-cancel ang order?'),
+        title: const Text('Cancel this order?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hindi')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Oo, i-cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, cancel'),
+          ),
         ],
       ),
     );
@@ -85,7 +92,9 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       await Api.I.cancel(widget.id);
       await _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     }
   }
 
@@ -98,10 +107,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         await _load();
         return;
       }
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => PaymentScreen(order: fresh)));
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => PaymentScreen(order: fresh)));
       await _load();
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -112,9 +124,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     try {
       await Api.I.review(widget.id, _rating, _comment.text.trim());
       await _load();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Salamat sa review!')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thank you for your review!')),
+        );
     } on ApiException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -124,12 +141,17 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Widget build(BuildContext context) {
     final o = _o;
     return Scaffold(
-      appBar: AppBar(title: Text(o == null ? 'Order' : '${o['order_number']}')),
+      backgroundColor: espresso,
+      appBar: AppBar(
+        backgroundColor: espresso,
+        foregroundColor: Colors.white,
+        title: const Text('Track Order'),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : o == null
-              ? Center(child: Text(_error ?? 'May error.'))
-              : _body(o, _t ?? {}),
+          ? Center(child: Text(_error ?? 'An error occurred.'))
+          : _body(o, _t ?? {}),
     );
   }
 
@@ -137,176 +159,690 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final status = '${o['status']}';
     final type = '${o['order_type']}';
     final isDelivery = type == 'delivery';
-    final rider = t['rider'] == null ? null : Map<String, dynamic>.from(t['rider'] as Map);
-    final dest = Map<String, dynamic>.from((t['destination'] ?? {}) as Map);
-    final shop = Map<String, dynamic>.from((t['shop'] ?? {}) as Map);
-    final timeline = mapList(t['timeline'] ?? []);
-    final items = mapList(o['items'] ?? []);
+    final rider = t['rider'] is Map
+        ? Map<String, dynamic>.from(t['rider'] as Map)
+        : null;
+    final dest = t['destination'] is Map
+        ? Map<String, dynamic>.from(t['destination'] as Map)
+        : <String, dynamic>{};
+    final shop = t['shop'] is Map
+        ? Map<String, dynamic>.from(t['shop'] as Map)
+        : <String, dynamic>{};
+    final timeline = t['timeline'] is List
+        ? mapList(t['timeline'])
+        : <Map<String, dynamic>>[];
+    final items = o['items'] is List
+        ? mapList(o['items'])
+        : <Map<String, dynamic>>[];
+    LatLng? point(Map<String, dynamic> value) {
+      if (value['lat'] == null || value['lng'] == null) return null;
+      return LatLng(dbl(value['lat']), dbl(value['lng']));
+    }
 
-    LatLng? pt(Map<String, dynamic> m) =>
-        (m['lat'] == null || m['lng'] == null) ? null : LatLng(dbl(m['lat']), dbl(m['lng']));
-    final destPt = pt(dest);
-    final shopPt = (dbl(shop['lat']) == 0 && dbl(shop['lng']) == 0) ? null : pt(shop);
-    final riderPt = rider == null ? null : pt(rider);
+    final destinationPoint = point(dest);
+    final rawShopPoint = point(shop);
+    final shopPoint =
+        rawShopPoint != null &&
+            rawShopPoint.latitude == 0 &&
+            rawShopPoint.longitude == 0
+        ? null
+        : rawShopPoint;
+    final riderPoint = rider == null ? null : point(rider);
+    final points = <LatLng>[
+      if (destinationPoint != null) destinationPoint,
+      if (riderPoint != null) riderPoint,
+      if (shopPoint != null) shopPoint,
+    ];
+    final isDelivered = status == 'delivered' || status == 'completed';
+    final isOnRoute = status == 'on_the_way' || status == 'picked_up';
+    final currentStep = isDelivered ? 2 : (isOnRoute ? 1 : 0);
+    final eta = rider?['eta_min'];
+    final address = (o['delivery_address'] ?? dest['address'] ?? '').toString();
 
-    final points = <LatLng>[?destPt, ?riderPt, ?shopPt];
-
-    return ListView(padding: const EdgeInsets.all(14), children: [
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: statusColor(status), borderRadius: BorderRadius.circular(14)),
-        child: Row(children: [
-          Expanded(child: Text(statusLabel(status, type), style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600))),
-          if (rider?['eta_min'] != null) Text('~${rider!['eta_min']} min', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-        ]),
-      ),
-      const SizedBox(height: 12),
-
-      // MAPA
-      if (isDelivery && destPt != null && !_final.contains(status)) ...[
-        SizedBox(
-          height: 260,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: FlutterMap(
-              key: ValueKey(riderPt != null),
-              options: MapOptions(
-                initialCenter: destPt,
-                initialZoom: 15,
-                initialCameraFit: points.length > 1
-                    ? CameraFit.bounds(bounds: LatLngBounds.fromPoints(points), padding: const EdgeInsets.all(48), maxZoom: 16)
-                    : null,
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 28),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '${o['order_number'] ?? 'Order'}',
+                style: const TextStyle(fontSize: 13, color: Colors.black54),
               ),
+            ),
+            IconButton(
+              tooltip: 'Refresh tracking',
+              onPressed: () => _load(silent: true),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+        ),
+        Card(
+          elevation: 1,
+          color: const Color(0xFFFFFCF8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.kjmcoffeebrew.app'),
-                MarkerLayer(markers: [
-                  if (shopPt != null) Marker(point: shopPt, width: 40, height: 40, child: const Text('â˜•', style: TextStyle(fontSize: 28))),
-                  Marker(point: destPt, width: 44, height: 44, alignment: Alignment.topCenter, child: const Text('ðŸ“', style: TextStyle(fontSize: 32))),
-                  if (riderPt != null) Marker(point: riderPt, width: 44, height: 44, child: const Text('ðŸ›µ', style: TextStyle(fontSize: 32))),
-                ]),
+                Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF1E6DA),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isDelivery
+                            ? Icons.delivery_dining_rounded
+                            : Icons.storefront_rounded,
+                        color: espresso,
+                        size: 29,
+                      ),
+                    ),
+                    const SizedBox(width: 13),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isDelivered
+                                ? 'Your order has been delivered!'
+                                : isOnRoute
+                                ? 'Your order is on the way!'
+                                : 'Your order is being prepared',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _statusText(status, type),
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (eta != null && !isDelivered)
+                      Text(
+                        'Arriving in $eta min',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: espresso,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    _trackingStep('Preparing', 0, currentStep),
+                    Expanded(child: _progressLine(currentStep >= 1)),
+                    _trackingStep('Out for delivery', 1, currentStep),
+                    Expanded(child: _progressLine(currentStep >= 2)),
+                    _trackingStep('Delivered', 2, currentStep),
+                  ],
+                ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          riderPt != null ? 'ðŸ›µ Live ang lokasyon ng rider (nag-a-update tuwing ilang segundo)' : 'Lalabas ang rider sa mapa kapag papunta na siya sa iyo.',
-          style: const TextStyle(fontSize: 12, color: Colors.black54),
-        ),
-        const SizedBox(height: 12),
-      ],
-
-      if (rider != null)
-        Card(
-          child: ListTile(
-            leading: const CircleAvatar(child: Text('ðŸ›µ')),
-            title: Text('${rider['name'] ?? 'Rider'}'),
-            subtitle: Text(statusLabel('${rider['status']}'.replaceAll('accepted', 'rider_assigned'), type)),
-            trailing: rider['phone'] == null
-                ? null
-                : IconButton(icon: const Icon(Icons.call, color: success), onPressed: () => launchUrl(Uri.parse('tel:${rider['phone']}'))),
+        const SizedBox(height: 14),
+        if (isDelivery) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: SizedBox(
+              height: 300,
+              child: destinationPoint == null
+                  ? _mapPlaceholder(address)
+                  : FlutterMap(
+                      key: ValueKey(
+                        '${riderPoint?.latitude}:${riderPoint?.longitude}',
+                      ),
+                      options: MapOptions(
+                        initialCenter: riderPoint ?? destinationPoint,
+                        initialZoom: 15,
+                        initialCameraFit: points.length > 1
+                            ? CameraFit.bounds(
+                                bounds: LatLngBounds.fromPoints(points),
+                                padding: const EdgeInsets.all(52),
+                                maxZoom: 16,
+                              )
+                            : null,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          userAgentPackageName: 'com.kjmcoffeebrew.app',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            if (shopPoint != null)
+                              Marker(
+                                point: shopPoint,
+                                width: 42,
+                                height: 48,
+                                child: _mapPin(
+                                  Icons.storefront_rounded,
+                                  caramel,
+                                ),
+                              ),
+                            Marker(
+                              point: destinationPoint,
+                              width: 42,
+                              height: 48,
+                              child: _mapPin(Icons.home_rounded, espresso),
+                            ),
+                            if (riderPoint != null)
+                              Marker(
+                                point: riderPoint,
+                                width: 48,
+                                height: 48,
+                                child: _mapPin(
+                                  Icons.delivery_dining_rounded,
+                                  Colors.red.shade700,
+                                ),
+                              ),
+                            if (riderPoint != null)
+                              Marker(
+                                point: LatLng(
+                                  (riderPoint.latitude +
+                                          destinationPoint.latitude) /
+                                      2,
+                                  (riderPoint.longitude +
+                                          destinationPoint.longitude) /
+                                      2,
+                                ),
+                                width: 174,
+                                height: 40,
+                                child: Container(
+                                  alignment: Alignment.center,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 7,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black26,
+                                        blurRadius: 6,
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    'Rider is ${Distance().as(LengthUnit.Kilometer, riderPoint, destinationPoint).toStringAsFixed(1)} km away',
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        RichAttributionWidget(
+                          attributions: [
+                            TextSourceAttribution('OpenStreetMap contributors'),
+                          ],
+                        ),
+                      ],
+                    ),
+            ),
           ),
-        ),
-
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Timeline', style: TextStyle(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 6),
-            for (final l in timeline)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(children: [
-                  Icon(Icons.check_circle, size: 16, color: statusColor('${l['status']}')),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(statusLabel('${l['status']}', type))),
-                  Text(timeText(l['at']), style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                ]),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Icon(
+                Icons.location_on_outlined,
+                size: 17,
+                color: riderPoint == null
+                    ? Colors.black45
+                    : Colors.red.shade700,
               ),
-          ]),
-        ),
-      ),
-
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (isDelivery) ...[
-              Text('ðŸ“ ${o['delivery_address'] ?? ''}'),
-              const Divider(),
+              const SizedBox(width: 5),
+              Expanded(
+                child: Text(
+                  riderPoint == null
+                      ? 'Location will appear here once the rider starts sharing their location.'
+                      : 'Rider location updates every few seconds.',
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ),
             ],
-            for (final it in items)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          ),
+          const SizedBox(height: 14),
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 25,
+                    backgroundColor: const Color(0xFFF1E6DA),
+                    child: Icon(
+                      Icons.delivery_dining_rounded,
+                      color: espresso,
+                      size: 28,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('${it['qty']}Ã— ${it['name']}'),
-                      if ((it['options'] as List).isNotEmpty) Text((it['options'] as List).join(', '), style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                    ]),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${rider?['name'] ?? 'Waiting for rider'}',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          rider == null
+                              ? 'Rider will be assigned once the order is ready.'
+                              : 'Delivery rider',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        if (rider?['plate_number'] != null)
+                          Text(
+                            '${rider!['plate_number']}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black54,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                  Text(peso(dbl(it['line_total']))),
-                ]),
+                  if (rider?['phone'] != null) ...[
+                    _contactButton(
+                      Icons.call_rounded,
+                      () => launchUrl(Uri.parse('tel:${rider!['phone']}')),
+                    ),
+                    const SizedBox(width: 8),
+                    _contactButton(
+                      Icons.chat_bubble_outline_rounded,
+                      () => launchUrl(Uri.parse('sms:${rider!['phone']}')),
+                    ),
+                  ],
+                ],
               ),
-            const Divider(),
-            _row('Subtotal', peso(dbl(o['subtotal']))),
-            if (dbl(o['discount']) > 0) _row('Diskwento', '-${peso(dbl(o['discount']))}'),
-            if (isDelivery) _row('Delivery fee', peso(dbl(o['delivery_fee']))),
-            _row('Total', peso(dbl(o['total'])), bold: true),
-            const SizedBox(height: 4),
-            Text('${payLabel(o['payment_method'])} Â· ${'${o['payment_status']}'.toUpperCase()}',
-                style: const TextStyle(fontSize: 12, color: Colors.black54)),
-            if (o['reject_reason'] != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text('Dahilan: ${o['reject_reason']}', style: const TextStyle(color: Colors.red))),
-          ]),
-        ),
-      ),
-
-      if (o['can_pay'] == true)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: FilledButton(
-            onPressed: _busy ? null : _pay,
-            child: Text('Magbayad sa GCash Â· ${peso(dbl(o['total']))}'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 46,
+          child: OutlinedButton.icon(
+            onPressed: () => setState(() => _showDetails = !_showDetails),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: espresso,
+              side: const BorderSide(color: espresso),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+            icon: Icon(
+              _showDetails
+                  ? Icons.expand_less_rounded
+                  : Icons.receipt_long_outlined,
+              size: 18,
+            ),
+            label: Text(
+              _showDetails ? 'Hide Order Details' : 'View Order Details',
+            ),
           ),
         ),
-
-      if (o['can_cancel'] == true)
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: Colors.red),
-          onPressed: _cancel,
-          child: const Text('I-cancel ang order'),
-        ),
-
-      if ((status == 'delivered' || status == 'completed') && o['has_review'] != true)
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(children: [
-              const Text('Kumusta ang order mo?', style: TextStyle(fontWeight: FontWeight.w600)),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                for (var i = 1; i <= 5; i++)
-                  IconButton(
-                    onPressed: () => setState(() => _rating = i),
-                    icon: Icon(i <= _rating ? Icons.star : Icons.star_border, color: Colors.amber, size: 32),
+        if (_showDetails)
+          Card(
+            elevation: 1,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              leading: const Icon(Icons.receipt_long_rounded, color: espresso),
+              title: const Text(
+                'Order details',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(
+                '${items.length} item${items.length == 1 ? '' : 's'}  |  ${peso(dbl(o['total']))}',
+              ),
+              initiallyExpanded: true,
+              children: [
+                if (isDelivery && address.isNotEmpty) ...[
+                  _infoRow(
+                    Icons.location_on_outlined,
+                    'Delivery address',
+                    address,
                   ),
-              ]),
-              TextField(controller: _comment, decoration: const InputDecoration(hintText: 'Komento (opsyonal)', border: OutlineInputBorder())),
-              const SizedBox(height: 10),
-              FilledButton(onPressed: _busy ? null : _review, child: const Text('Ipadala ang review')),
-            ]),
+                  const Divider(height: 20),
+                ],
+                for (final item in items)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${item['qty']} × ${item['name']}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              if (item['options'] is List &&
+                                  (item['options'] as List).isNotEmpty)
+                                Text(
+                                  (item['options'] as List).join(', '),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Text(peso(dbl(item['line_total']))),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 20),
+                _row('Subtotal', peso(dbl(o['subtotal']))),
+                if (dbl(o['discount']) > 0)
+                  _row('Discount', '-${peso(dbl(o['discount']))}'),
+                if (isDelivery)
+                  _row('Delivery fee', peso(dbl(o['delivery_fee']))),
+                _row('Total', peso(dbl(o['total'])), bold: true),
+                const SizedBox(height: 8),
+                _infoRow(
+                  Icons.payments_outlined,
+                  'Payment',
+                  '${payLabel(o['payment_method'])}  |  ${'${o['payment_status']}'.toUpperCase()}',
+                ),
+                if (o['reject_reason'] != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Reason: ${o['reject_reason']}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ],
+                if (timeline.isNotEmpty) ...[
+                  const Divider(height: 24),
+                  const Text(
+                    'Status history',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final entry in timeline)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.check_circle_rounded,
+                            size: 17,
+                            color: statusColor('${entry['status']}'),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _statusText('${entry['status']}', type),
+                            ),
+                          ),
+                          Text(
+                            timeText(entry['at']),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ],
+            ),
           ),
-        ),
-      const SizedBox(height: 24),
-    ]);
+        const SizedBox(height: 12),
+        if (o['can_pay'] == true)
+          FilledButton(
+            onPressed: _busy ? null : _pay,
+            child: Text('Pay via GCash  |  ${peso(dbl(o['total']))}'),
+          ),
+        if (o['can_cancel'] == true)
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              foregroundColor: Colors.red,
+            ),
+            onPressed: _cancel,
+            icon: const Icon(Icons.cancel_outlined),
+            label: const Text('Cancel order'),
+          ),
+        if ((status == 'delivered' || status == 'completed') &&
+            o['has_review'] != true)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  const Text(
+                    'How was your order?',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (var i = 1; i <= 5; i++)
+                        IconButton(
+                          onPressed: () => setState(() => _rating = i),
+                          icon: Icon(
+                            i <= _rating ? Icons.star : Icons.star_border,
+                            color: Colors.amber,
+                            size: 32,
+                          ),
+                        ),
+                    ],
+                  ),
+                  TextField(
+                    controller: _comment,
+                    decoration: const InputDecoration(
+                      hintText: 'Comment (optional)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  FilledButton(
+                    onPressed: _busy ? null : _review,
+                    child: const Text('Submit review'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
-  Widget _row(String l, String v, {bool bold = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Text(l, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null)),
-          Text(v, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null, color: bold ? caramel : null)),
-        ]),
-      );
-}
+  String _statusText(String status, [String type = 'delivery']) {
+    switch (status) {
+      case 'awaiting_payment':
+        return 'Waiting for payment';
+      case 'pending':
+        return 'Waiting for shop confirmation';
+      case 'confirmed':
+        return 'Order confirmed';
+      case 'preparing':
+        return 'Preparing your order';
+      case 'ready':
+        return type == 'pickup'
+            ? 'Ready for pickup'
+            : 'Ready, waiting for a rider';
+      case 'rider_assigned':
+        return 'Rider assigned';
+      case 'picked_up':
+        return 'Picked up by rider';
+      case 'on_the_way':
+        return 'Out for delivery';
+      case 'delivered':
+        return 'Delivered';
+      case 'completed':
+        return 'Completed';
+      case 'rejected':
+        return 'Rejected by shop';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status;
+    }
+  }
 
+  Widget _trackingStep(String label, int step, int current) {
+    final done = step <= current;
+    return SizedBox(
+      width: 58,
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: done ? espresso : const Color(0xFFE4DED8),
+            child: Icon(
+              step < current
+                  ? Icons.check
+                  : (step == 0
+                        ? Icons.coffee_rounded
+                        : step == 1
+                        ? Icons.delivery_dining_rounded
+                        : Icons.home_rounded),
+              size: 14,
+              color: done ? Colors.white : Colors.black45,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10,
+              color: done ? espresso : Colors.black45,
+              fontWeight: done ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _progressLine(bool active) => Container(
+    height: 2,
+    color: active ? espresso : const Color(0xFFE4DED8),
+    margin: const EdgeInsets.only(bottom: 18),
+  );
+
+  Widget _mapPin(IconData icon, Color color) => Container(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      shape: BoxShape.circle,
+      border: Border.all(color: color, width: 2),
+      boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 5)],
+    ),
+    child: Icon(icon, color: color, size: 25),
+  );
+
+  Widget _mapPlaceholder(String address) => Container(
+    color: const Color(0xFFECE7E1),
+    alignment: Alignment.center,
+    padding: const EdgeInsets.all(24),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(Icons.location_searching_rounded, size: 44, color: espresso),
+        const SizedBox(height: 10),
+        const Text(
+          'No map location available for this address.',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        if (address.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text(
+            address,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.black54),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  Widget _contactButton(IconData icon, VoidCallback onPressed) =>
+      IconButton.filledTonal(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 19),
+        style: IconButton.styleFrom(
+          backgroundColor: const Color(0xFFF1E6DA),
+          foregroundColor: espresso,
+        ),
+      );
+
+  Widget _infoRow(IconData icon, String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 19, color: espresso),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+              const SizedBox(height: 2),
+              Text(value),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+  Widget _row(String l, String v, {bool bold = false}) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(l, style: TextStyle(fontWeight: bold ? FontWeight.w700 : null)),
+        Text(
+          v,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.w700 : null,
+            color: bold ? caramel : null,
+          ),
+        ),
+      ],
+    ),
+  );
+}

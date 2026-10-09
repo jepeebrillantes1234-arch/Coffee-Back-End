@@ -23,14 +23,15 @@ class CartLine {
 
   double get total => unitPrice * qty;
 
-  String get key => '$productId|${([...optionIds]..sort()).join(',')}|${notes ?? ''}';
+  String get key =>
+      '$productId|${([...optionIds]..sort()).join(',')}|${notes ?? ''}';
 
   Map<String, dynamic> toPayload() => {
-        'product_id': productId,
-        'quantity': qty,
-        'option_ids': optionIds,
-        if (notes != null && notes!.isNotEmpty) 'notes': notes,
-      };
+    'product_id': productId,
+    'quantity': qty,
+    'option_ids': optionIds,
+    if (notes != null && notes!.isNotEmpty) 'notes': notes,
+  };
 }
 
 class Cart extends ChangeNotifier {
@@ -48,6 +49,20 @@ class Cart extends ChangeNotifier {
       lines[i].qty += line.qty;
     } else {
       lines.add(line);
+    }
+    notifyListeners();
+  }
+
+  void update(int index, CartLine line) {
+    if (index < 0 || index >= lines.length) return;
+    final duplicate = lines.indexWhere(
+      (item) => item != lines[index] && item.key == line.key,
+    );
+    if (duplicate >= 0) {
+      lines[duplicate].qty += line.qty;
+      lines.removeAt(index);
+    } else {
+      lines[index] = line;
     }
     notifyListeners();
   }

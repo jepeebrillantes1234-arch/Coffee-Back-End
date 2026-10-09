@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'core/api.dart';
 import 'core/role_home.dart';
 import 'core/theme.dart';
-import 'screens/auth_screen.dart';
+import 'screens/get_started_screen.dart';
 import 'screens/splash_screen.dart';
 
 Future<void> main() async {
@@ -22,8 +22,10 @@ class KjmApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: appTheme(),
       home: SplashScreen(
-        nextScreen: Api.I.loggedIn ? homeForRole(Api.I.role) : const AuthScreen(),
+        nextScreen: Api.I.loggedIn ? homeForRole(Api.I.role) : const GetStartedScreen(),
       ),
     );
   }
 }
+
+

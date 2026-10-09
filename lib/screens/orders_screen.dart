@@ -63,7 +63,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mga Order Ko')),
+      appBar: AppBar(title: const Text('My Orders')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
@@ -71,7 +71,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
               child: _orders.isEmpty
                   ? ListView(children: [
                       const SizedBox(height: 120),
-                      Center(child: Text(_error ?? 'Wala ka pang order.', style: TextStyle(color: _error != null ? Colors.red : Colors.black54))),
+                      Center(
+                        child: Text(
+                          _error ?? 'You have no orders yet.',
+                          style: TextStyle(
+                            color: _error != null ? Colors.red : Colors.black54,
+                          ),
+                        ),
+                      ),
                     ])
                   : ListView.builder(
                       padding: const EdgeInsets.all(12),
@@ -82,20 +89,40 @@ class _OrdersScreenState extends State<OrdersScreen> {
                         return Card(
                           child: ListTile(
                             onTap: () async {
-                              await Navigator.of(context).push(MaterialPageRoute(builder: (_) => OrderDetailScreen(id: o['id'] as int)));
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      OrderDetailScreen(id: o['id'] as int),
+                                ),
+                              );
                               _load(silent: true);
                             },
                             title: Row(children: [
-                              Expanded(child: Text('${o['order_number']}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                              Expanded(
+                                child: Text(
+                                  '${o['order_number']}',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(color: statusColor(status), borderRadius: BorderRadius.circular(20)),
-                                child: Text(statusLabel(status, '${o['order_type']}'), style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: statusColor(status),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  statusLabel(status, '${o['order_type']}'),
+                                  style: const TextStyle(
+                                      color: Colors.white, fontSize: 10),
+                                ),
                               ),
                             ]),
                             subtitle: Text(
-                                '${(o['order_type'] == 'delivery') ? 'Delivery' : 'Pickup'} · ${dateTimeText(o['created_at'])}\n${peso(dbl(o['total']))}',
-                                style: const TextStyle(height: 1.4)),
+                              '${(o['order_type'] == 'delivery') ? 'Delivery' : 'Pickup'} · ${dateTimeText(o['created_at'])}\n${peso(dbl(o['total']))}',
+                              style: const TextStyle(height: 1.4),
+                            ),
                             isThreeLine: true,
                           ),
                         );
