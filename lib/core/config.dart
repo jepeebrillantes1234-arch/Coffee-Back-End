@@ -4,4 +4,8 @@ class AppConfig {
     'API_BASE_URL',
     defaultValue: 'https://banana-fetal-eloquence.ngrok-free.dev/api/v1',
   );
+
+  static const String googleServerClientId = String.fromEnvironment(
+    'GOOGLE_SERVER_CLIENT_ID',
+  );
 }

@@ -120,7 +120,7 @@ class _ProductScreenState extends State<ProductScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Hanggang ${g['max_select']} lang ang puwede sa ${g['name']}.',
+                'You can select up to ${g['max_select']} for ${g['name']}.',
               ),
             ),
           );
@@ -137,8 +137,9 @@ class _ProductScreenState extends State<ProductScreen> {
   void _add() {
     for (final g in _groups) {
       if (g['is_required'] == true && (_sel[g['id'] as int] ?? {}).isEmpty) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Pumili ng ${g['name']}.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Please select ${g['name']}.')));
         return;
       }
     }
@@ -161,9 +162,7 @@ class _ProductScreenState extends State<ProductScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          widget.cartIndex == null
-              ? 'Naidagdag sa cart'
-              : 'Na-update ang coffee',
+          widget.cartIndex == null ? 'Added to cart' : 'Coffee updated',
         ),
       ),
     );
@@ -174,92 +173,176 @@ class _ProductScreenState extends State<ProductScreen> {
   Widget build(BuildContext context) {
     final p = _p;
     return Scaffold(
-      appBar: AppBar(title: Text(p == null ? 'Product' : '${p['name']}')),
+      backgroundColor: const Color(0xFFFCF9F4),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFCF9F4),
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: espresso, size: 28),
+        ),
+        titleSpacing: 0,
+        title: Text(
+          p == null ? 'Order' : '${p['name']}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: espresso,
+            fontFamily: 'serif',
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        actions: const [
+          Padding(
+            padding: EdgeInsets.only(right: 16),
+            child: Icon(Icons.coffee_outlined, color: caramel, size: 30),
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : p == null
-          ? Center(child: Text(_error ?? 'May error.'))
+          ? Center(child: Text(_error ?? 'Something went wrong.'))
           : Column(
               children: [
                 Expanded(
                   child: ListView(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
                     children: [
-                      SizedBox(
-                        height: 220,
-                        width: double.infinity,
-                        child: NetImage(p['image_url']?.toString()),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${p['name']}',
-                              style: const TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if ((p['description'] ?? '').toString().isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  '${p['description']}',
-                                  style: const TextStyle(color: Colors.black54),
-                                ),
-                              ),
-                            const SizedBox(height: 16),
-                            _promoTag(p),
-                            for (final g in _groups) _group(g),
-                            const SizedBox(height: 8),
-                            TextField(
-                              controller: _notes,
-                              decoration: const InputDecoration(
-                                labelText: 'Note (opsyonal)',
-                                border: OutlineInputBorder(),
-                                filled: true,
-                                fillColor: Colors.white,
-                              ),
-                            ),
-                            if (_reviews != null) _reviewsBox(),
-                          ],
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: SizedBox(
+                          height: 245,
+                          width: double.infinity,
+                          child: NetImage(p['image_url']?.toString()),
                         ),
                       ),
+                      const SizedBox(height: 18),
+                      Text(
+                        '${p['name']}',
+                        style: const TextStyle(
+                          color: espresso,
+                          fontFamily: 'serif',
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        '${p['description'] ?? 'Choose your options and make it your own.'}',
+                        style: const TextStyle(
+                          color: Color(0xFF70665F),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        peso(dbl(p['base_price'])),
+                        style: const TextStyle(
+                          color: espresso,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _promoTag(p),
+                      for (final g in _groups) _group(g),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: const Color(0xFFEFE5D9)),
+                        ),
+                        child: TextField(
+                          controller: _notes,
+                          minLines: 2,
+                          maxLines: 3,
+                          decoration: const InputDecoration(
+                            labelText: 'Note (optional)',
+                            hintText:
+                                'e.g. Less sugar, extra ice, no whipped cream',
+                            border: InputBorder.none,
+                            icon: Icon(
+                              Icons.edit_note_rounded,
+                              color: espresso,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_reviews != null) _reviewsBox(),
                     ],
                   ),
                 ),
                 SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFFCF9F4),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Color(0x12000000),
+                          blurRadius: 16,
+                          offset: Offset(0, -4),
+                        ),
+                      ],
+                    ),
                     child: Row(
                       children: [
-                        IconButton.outlined(
-                          onPressed: _qty > 1
-                              ? () => setState(() => _qty--)
-                              : null,
-                          icon: const Icon(Icons.remove),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Text(
-                            '$_qty',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(color: const Color(0xFFE8D8C8)),
                           ),
-                        ),
-                        IconButton.outlined(
-                          onPressed: () => setState(() => _qty++),
-                          icon: const Icon(Icons.add),
+                          child: Row(
+                            children: [
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                onPressed: _qty > 1
+                                    ? () => setState(() => _qty--)
+                                    : null,
+                                icon: const Icon(
+                                  Icons.remove_rounded,
+                                  color: espresso,
+                                ),
+                              ),
+                              Text(
+                                '$_qty',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () => setState(() => _qty++),
+                                icon: const Icon(
+                                  Icons.add_rounded,
+                                  color: espresso,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: FilledButton(
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(56),
+                              backgroundColor: espresso,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(32),
+                              ),
+                            ),
                             onPressed: _add,
                             child: Text(
-                              '${widget.cartIndex == null ? 'Idagdag sa cart' : 'I-save ang pagbabago'} - ${peso(_unit * _qty)}',
+                              '${widget.cartIndex == null ? 'Add to cart' : 'Save changes'} · ${peso(_unit * _qty)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -279,14 +362,15 @@ class _ProductScreenState extends State<ProductScreen> {
         final sp = SelectedPromo.I.promo;
         if (sp == null) return const SizedBox.shrink();
         final pid = SelectedPromo.I.productId;
-        if (pid != null && pid != (p['id'] as num).toInt())
+        if (pid != null && pid != (p['id'] as num).toInt()) {
           return const SizedBox.shrink();
+        }
 
         final text = pid == null
-            ? '🎟 Promo ${sp['code']} ay awtomatikong gagamitin sa checkout.'
+            ? 'Promo ${sp['code']} will be applied automatically at checkout.'
             : SelectedPromo.I.isBogo
-            ? '🎟 ${sp['headline'] ?? sp['code']}: nakalagay na ang ${SelectedPromo.I.bogoNeed} piraso. Awtomatiko ang diskwento sa checkout.'
-            : '🎟 ${sp['headline'] ?? sp['code']} sa produktong ito (1 piraso lang). Awtomatiko sa checkout.';
+            ? '${sp['headline'] ?? sp['code']}: ${SelectedPromo.I.bogoNeed} items are selected. The discount will be applied at checkout.'
+            : '${sp['headline'] ?? sp['code']} is available for this item (one item only). Applied automatically at checkout.';
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 14),
@@ -313,14 +397,14 @@ class _ProductScreenState extends State<ProductScreen> {
         children: [
           Text(
             count == 0
-                ? 'Mga Review'
-                : 'Mga Review · ★ ${dbl(r['avg']).toStringAsFixed(1)} ($count)',
+                ? 'Reviews'
+                : 'Reviews · ★ ${dbl(r['avg']).toStringAsFixed(1)} ($count)',
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
           ),
           const SizedBox(height: 6),
           if (items.isEmpty)
             const Text(
-              'Wala pang review.',
+              'No reviews yet.',
               style: TextStyle(color: Colors.black54),
             ),
           for (final it in items)
@@ -375,48 +459,130 @@ class _ProductScreenState extends State<ProductScreen> {
 
   Widget _group(Map<String, dynamic> g) {
     final opts = mapList(g['options'] ?? []);
-    final gid = g['id'] as int;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+    final name = '${g['name']}';
+    final icon = name.toLowerCase().contains('sugar')
+        ? Icons.grain_rounded
+        : name.toLowerCase().contains('milk')
+        ? Icons.local_drink_outlined
+        : Icons.coffee_outlined;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFEFE5D9)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                '${g['name']}',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF6EBDD),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: espresso, size: 21),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: espresso,
+                  ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                g['is_required'] == true ? 'Kailangan' : 'Opsyonal',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: g['is_required'] == true ? caramel : Colors.black45,
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: g['is_required'] == true
+                      ? const Color(0xFFFFF0DF)
+                      : const Color(0xFFF3EEE8),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  g['is_required'] == true ? 'Required' : 'Optional',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: g['is_required'] == true ? caramel : Colors.black54,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            runSpacing: 4,
-            children: [
-              for (final o in opts)
-                FilterChip(
-                  label: Text(
-                    '${o['name']}${dbl(o['extra_price']) > 0 ? '  +₱${dbl(o['extra_price']).toStringAsFixed(0)}' : ''}',
-                  ),
-                  selected: _sel[gid]?.contains(o['id'] as int) == true,
-                  onSelected: (_) => _toggle(g, o),
-                  selectedColor: caramel.withValues(alpha: 0.3),
-                ),
-            ],
+            runSpacing: 8,
+            children: [for (final option in opts) _optionChip(g, option)],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _optionChip(Map<String, dynamic> group, Map<String, dynamic> option) {
+    final selected =
+        _sel[group['id'] as int]?.contains(option['id'] as int) == true;
+    final extra = dbl(option['extra_price']);
+    return InkWell(
+      borderRadius: BorderRadius.circular(24),
+      onTap: () => _toggle(group, option),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? caramel : const Color(0xFFFCF8F2),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: selected ? caramel : const Color(0xFFE7D8C8),
+          ),
+          boxShadow: selected
+              ? const [
+                  BoxShadow(
+                    color: Color(0x1F512D1C),
+                    blurRadius: 6,
+                    offset: Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (selected) ...[
+              const Icon(Icons.check_rounded, color: Colors.white, size: 17),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              '${option['name']}',
+              style: TextStyle(
+                color: selected ? Colors.white : espresso,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (extra > 0) ...[
+              const SizedBox(width: 7),
+              Text(
+                '+${peso(extra)}',
+                style: TextStyle(
+                  color: selected ? Colors.white : caramel,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

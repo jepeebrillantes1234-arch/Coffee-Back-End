@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/api.dart';
-import '../core/theme.dart';
+
+import '../core/theme.dart';  
 import '../core/util.dart';
 import 'order_detail_screen.dart';
 
-/// Pagbabayad sa GCash. Bubukas ang PayMongo checkout sa browser; pagbalik mo,
+/// QRPh payment. Bubukas ang PayMongo hosted checkout; pagbalik,
 /// awtomatikong titingnan kung bayad na.
 class PaymentScreen extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -18,7 +20,8 @@ class PaymentScreen extends StatefulWidget {
   State<PaymentScreen> createState() => _PaymentScreenState();
 }
 
-class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserver {
+class _PaymentScreenState extends State<PaymentScreen>
+    with WidgetsBindingObserver {
   late Map<String, dynamic> _order;
   Timer? _poll;
   Timer? _tick;
@@ -37,7 +40,7 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     _updateLeft();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) => _updateLeft());
     _poll = Timer.periodic(const Duration(seconds: 4), (_) => _verify());
-    // Buksan agad ang GCash checkout
+    // Buksan agad ang QRPh hosted checkout
     WidgetsBinding.instance.addPostFrameCallback((_) => _openCheckout());
   }
 
@@ -62,7 +65,8 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
   }
 
   void _snack(String m) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    if (mounted)
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
   }
 
   Future<void> _openCheckout() async {
@@ -77,11 +81,14 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
       }
     }
     if (url == null || url.isEmpty) {
-      _snack('Walang payment link. Subukan ulit.');
+      _snack('No payment link is available. Please try again.');
       return;
     }
-    final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
-    if (!ok) _snack('Hindi mabuksan ang payment page.');
+    final ok = await launchUrl(
+      Uri.parse(url),
+      mode: LaunchMode.externalApplication,
+    );
+    if (!ok) _snack('Could not open the payment page.');
   }
 
   Future<void> _payAgain() async {
@@ -111,14 +118,18 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
         _done = true;
         _poll?.cancel();
         if (st == 'cancelled') {
-          _snack('Na-cancel ang order dahil hindi nabayaran.');
+          _snack('The order was cancelled because payment was not completed.');
           Navigator.of(context).pop();
         } else {
-          _snack('Bayad na! Salamat 🎉');
-          Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => OrderDetailScreen(id: _id)));
+          _snack('Payment received. Thank you! 🎉');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => OrderDetailScreen(id: _id)),
+          );
         }
       } else if (manual) {
-        _snack('Wala pa kaming natatanggap na bayad. Subukan ulit pagkalipas ng ilang segundo.');
+        _snack(
+          'Payment has not been received yet. Please try again in a few seconds.',
+        );
       }
     } on ApiException catch (e) {
       if (manual) _snack(e.message);
@@ -131,11 +142,17 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('I-cancel ang order?'),
-        content: const Text('Hindi ka pa nasisingil.'),
+        title: const Text('Cancel this order?'),
+        content: const Text('You have not been charged.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hindi')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Oo, i-cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep order'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, cancel'),
+          ),
         ],
       ),
     );
@@ -161,46 +178,93 @@ class _PaymentScreenState extends State<PaymentScreen> with WidgetsBindingObserv
     return PopScope(
       canPop: true,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Pagbabayad')),
-        body: ListView(padding: const EdgeInsets.all(20), children: [
-          const SizedBox(height: 10),
-          const Text('💙', textAlign: TextAlign.center, style: TextStyle(fontSize: 56)),
-          const SizedBox(height: 8),
-          const Text('Magbayad gamit ang GCash', textAlign: TextAlign.center, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Text('${_order['order_number']}', textAlign: TextAlign.center, style: const TextStyle(color: Colors.black54)),
-          const SizedBox(height: 18),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(children: [
-                const Text('Halagang babayaran'),
-                Text(peso(dbl(_order['total'])), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: caramel)),
-                const Divider(height: 24),
-                Text(expired ? 'Nag-expire na ang oras ng pagbabayad' : 'Mag-e-expire ang order sa $_timeText',
-                    style: TextStyle(color: expired ? Colors.red : Colors.black54)),
-              ]),
+        appBar: AppBar(title: const Text('Payment')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const SizedBox(height: 10),
+            const Text(
+              '💙',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 56),
             ),
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            '1. Pindutin ang "Magbayad sa GCash".\n2. Tapusin ang bayad sa page na bubukas.\n3. Bumalik dito. Awtomatiko naming kukumpirmahin ang bayad mo.\n\nMakikita lang ng shop ang order mo kapag bayad na.',
-            style: TextStyle(height: 1.5, color: Colors.black54),
-          ),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: _busy ? null : (expired ? null : _payAgain),
-            child: _busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Magbayad sa GCash'),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-            onPressed: () => _verify(manual: true),
-            child: const Text('Nakabayad na ako'),
-          ),
-          const SizedBox(height: 6),
-          TextButton(onPressed: _cancel, child: const Text('I-cancel ang order', style: TextStyle(color: Colors.red))),
-        ]),
+            const SizedBox(height: 8),
+            const Text(
+              'Pay with QRPh',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${_order['order_number']}',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 18),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(
+                  children: [
+                    const Text('Amount due'),
+                    Text(
+                      peso(dbl(_order['total'])),
+                      style: const TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        color: caramel,
+                      ),
+                    ),
+                    const Divider(height: 24),
+                    Text(
+                      expired
+                          ? 'The payment window has expired'
+                          : 'Payment expires in $_timeText',
+                      style: TextStyle(
+                        color: expired ? Colors.red : Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              '1. Open the secure QRPh checkout.\n2. Scan the QR code with a QRPh-enabled wallet or banking app.\n3. Return here. We will verify your payment automatically.\n\nThe shop will receive your order after payment is confirmed.',
+              style: TextStyle(height: 1.5, color: Colors.black54),
+            ),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: _busy ? null : (expired ? null : _payAgain),
+              child: _busy
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('Open QRPh Checkout'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(48),
+              ),
+              onPressed: () => _verify(manual: true),
+              child: const Text('I have paid'),
+            ),
+            const SizedBox(height: 6),
+            TextButton(
+              onPressed: _cancel,
+              child: const Text(
+                'Cancel order',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

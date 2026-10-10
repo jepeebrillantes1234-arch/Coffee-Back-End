@@ -8,7 +8,6 @@ import '../core/theme.dart';
 import '../core/util.dart';
 import '../core/widgets.dart';
 import '../state/favorites.dart';
-import '../state/cart.dart';
 import '../state/app_state.dart';
 import '../state/nav.dart';
 import 'notifications_screen.dart';
@@ -140,23 +139,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     icon: const Icon(Icons.menu_rounded, color: espresso),
                   ),
                   const Spacer(),
-                  AnimatedBuilder(
-                    animation: Cart.I,
-                    builder: (context, _) => IconButton(
-                      tooltip: 'Cart',
-                      onPressed: () => rootTab.value = 2,
-                      icon: Badge(
-                        isLabelVisible: Cart.I.count > 0,
-                        label: Text('${Cart.I.count}'),
-                        backgroundColor: const Color(0xFFE53935),
-                        textColor: Colors.white,
-                        child: const Icon(
-                          Icons.shopping_cart_outlined,
-                          color: espresso,
-                        ),
-                      ),
-                    ),
-                  ),
                   IconButton(
                     tooltip: 'Notifications',
                     icon: Badge(
@@ -239,7 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     child: const Text(
-                      'Order Now ÃƒÂ¢Ã…Â¾Ã…â€œ ',
+                      'Order Now ',
                       style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -456,7 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!_loading && items.isEmpty && _error == null)
             const Padding(
               padding: EdgeInsets.all(24),
-              child: Center(child: Text('Wala pang product.')),
+              child: Center(child: Text('No products available yet.')),
             ),
           GridView.builder(
             shrinkWrap: true,

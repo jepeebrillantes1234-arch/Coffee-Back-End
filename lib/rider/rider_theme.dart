@@ -6,15 +6,15 @@ const riderGreen = Color(0xFF1F3D2F);
 String deliveryStatusLabel(String s) {
   switch (s) {
     case 'assigned':
-      return 'Bagong assign';
+      return 'New assignment';
     case 'accepted':
       return 'Tinanggap';
     case 'picked_up':
-      return 'Kinuha na ang order';
+      return 'Order picked up';
     case 'on_the_way':
-      return 'Papunta sa customer';
+      return 'On the way to customer';
     case 'delivered':
-      return 'Na-deliver';
+      return 'Delivered';
     default:
       return s;
   }

@@ -167,7 +167,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         ? ListView(
                             children: const [
                               SizedBox(height: 120),
-                              Center(child: Text('Walang nahanap na product.')),
+                              Center(child: Text('No products found.')),
                             ],
                           )
                         : ListView.separated(
@@ -267,13 +267,24 @@ class _MenuScreenState extends State<MenuScreen> {
 /// Ginagamit din sa Favorites screen
 Widget productCard(BuildContext context, Map<String, dynamic> p) {
   return InkWell(
-    borderRadius: BorderRadius.circular(16),
+    borderRadius: BorderRadius.circular(24),
     onTap: () => Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => ProductScreen(id: p['id'] as int)),
     ),
-    child: Card(
+    child: Container(
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFCF6),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFEDE5DA)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D392517),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -283,24 +294,27 @@ Widget productCard(BuildContext context, Map<String, dynamic> p) {
               children: [
                 NetImage(p['image_url']?.toString()),
                 Positioned(
-                  top: 4,
-                  right: 4,
+                  top: 10,
+                  right: 10,
                   child: ListenableBuilder(
                     listenable: Favorites.I,
                     builder: (_, _) {
                       final fav = Favorites.I.has(p['id'] as int);
                       return Material(
-                        color: Colors.white.withValues(alpha: 0.85),
+                        color: Colors.white.withValues(alpha: 0.94),
                         shape: const CircleBorder(),
                         child: InkWell(
                           customBorder: const CircleBorder(),
                           onTap: () => Favorites.I.toggle(p),
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
+                          child: SizedBox(
+                            width: 42,
+                            height: 42,
                             child: Icon(
-                              fav ? Icons.favorite : Icons.favorite_border,
-                              size: 20,
-                              color: fav ? Colors.red : espresso,
+                              fav
+                                  ? Icons.favorite_rounded
+                                  : Icons.favorite_border_rounded,
+                              size: 23,
+                              color: fav ? const Color(0xFFE76565) : espresso,
                             ),
                           ),
                         ),
@@ -312,36 +326,47 @@ Widget productCard(BuildContext context, Map<String, dynamic> p) {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   '${p['name']}',
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    color: espresso,
+                    fontFamily: 'serif',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    height: 1.08,
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 7),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      peso(dbl(p['base_price'])),
-                      style: const TextStyle(
-                        color: caramel,
-                        fontWeight: FontWeight.w700,
+                    const Icon(
+                      Icons.eco_rounded,
+                      size: 14,
+                      color: Color(0xFF87927A),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Container(
+                        height: 1.5,
+                        color: const Color(0xFFB9C0AE),
                       ),
                     ),
-                    if (dbl(p['avg_rating']) > 0)
-                      Text(
-                        '★ ${dbl(p['avg_rating']).toStringAsFixed(1)}',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.amber,
-                        ),
-                      ),
                   ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  peso(dbl(p['base_price'])),
+                  style: const TextStyle(
+                    color: Color(0xFF566442),
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),

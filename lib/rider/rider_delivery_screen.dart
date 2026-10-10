@@ -84,7 +84,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
   Future<void> _openUrl(String url) async {
     final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Hindi mabuksan.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open the map.')));
     }
   }
 
@@ -96,7 +96,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : d == null
-              ? Center(child: Text(_error ?? 'May error.'))
+              ? Center(child: Text(_error ?? 'Something went wrong.'))
               : _body(d),
     );
   }
@@ -147,7 +147,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
         builder: (_, on, _) => ValueListenableBuilder<String?>(
           valueListenable: LocationService.I.error,
           builder: (_, err, _) => Text(
-            err != null ? 'âš ï¸ $err' : (on ? 'ðŸ“¡ Nagpapadala ng GPS tuwing 5 segundo' : 'GPS: hindi pa nagsisimula'),
+            err != null ? '⚠ $err' : (on ? '📡 Sending GPS every 5 seconds' : 'GPS: not started'),
             style: TextStyle(color: err != null ? Colors.red : (on ? success : Colors.black54), fontSize: 13),
           ),
         ),
@@ -181,7 +181,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Mga Item', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Items', style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             for (final it in items)
               Padding(
@@ -190,7 +190,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
               ),
             const Divider(),
             Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(cod ? 'Kolektahin (COD)' : 'Bayad: ${(o['payment_status'] as String).toUpperCase()}'),
+              Text(cod ? 'Collect payment (COD)' : 'Payment: ${(o['payment_status'] as String).toUpperCase()}'),
               Text('â‚±${(o['total'] as num).toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w700, color: caramel, fontSize: 18)),
             ]),
           ]),
@@ -204,7 +204,7 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           onPressed: () => _openUrl('https://www.google.com/maps/dir/?api=1&destination=${cust.latitude},${cust.longitude}&travelmode=driving'),
           icon: const Icon(Icons.navigation),
-          label: const Text('Mag-navigate (Google Maps)'),
+          label: const Text('Navigate with Google Maps'),
         ),
       const SizedBox(height: 8),
 
@@ -213,16 +213,16 @@ class _RiderDeliveryScreenState extends State<RiderDeliveryScreen> {
         const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator()))
       else ...[
         if (status == 'assigned') ...[
-          FilledButton(onPressed: () => _act('accept'), child: const Text('Tanggapin ang delivery')),
+          FilledButton(onPressed: () => _act('accept'), child: const Text('Accept delivery')),
           const SizedBox(height: 8),
           OutlinedButton(
             style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48), foregroundColor: Colors.red),
             onPressed: () => _act('decline'),
-            child: const Text('Tanggihan'),
+            child: const Text('Decline'),
           ),
         ],
-        if (status == 'accepted') FilledButton(onPressed: () => _act('pickup'), child: const Text('Kinuha ko na ang order')),
-        if (status == 'picked_up') FilledButton(onPressed: () => _act('start'), child: const Text('Simulan ang Delivery (start GPS)')),
+        if (status == 'accepted') FilledButton(onPressed: () => _act('pickup'), child: const Text('I picked up the order')),
+        if (status == 'picked_up') FilledButton(onPressed: () => _act('start'), child: const Text('Start delivery (start GPS)')),
         if (status == 'on_the_way')
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: success),

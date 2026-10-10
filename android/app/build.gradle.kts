@@ -38,6 +38,12 @@ android {
     }
 }
 
+// Keep AndroidX Startup aligned with current Android Gradle resource linking.
+// Several Flutter plugins initialize through this provider at process startup.
+dependencies {
+    implementation("androidx.startup:startup-runtime:1.2.0")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

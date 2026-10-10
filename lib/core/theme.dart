@@ -31,31 +31,31 @@ ThemeData appTheme() => ThemeData(
 String statusLabel(String s, [String type = 'delivery']) {
   switch (s) {
     case 'awaiting_payment':
-      return 'Hinihintay ang bayad';
+      return 'Awaiting payment';
     case 'pending':
-      return 'Naghihintay ng kumpirmasyon';
+      return 'Awaiting confirmation';
     case 'confirmed':
-      return 'Kinumpirma ng shop';
+      return 'Confirmed by shop';
     case 'preparing':
-      return 'Inihahanda ang order';
+      return 'Preparing your order';
     case 'ready':
       return type == 'pickup'
-          ? 'Handa nang kunin'
-          : 'Handa na, naghahanap ng rider';
+          ? 'Ready for pickup'
+          : 'Ready, waiting for a rider';
     case 'rider_assigned':
-      return 'May rider na';
+      return 'Rider assigned';
     case 'picked_up':
-      return 'Kinuha na ng rider';
+      return 'Picked up by rider';
     case 'on_the_way':
-      return 'Papunta na sa iyo';
+      return 'On the way';
     case 'delivered':
-      return 'Na-deliver na';
+      return 'Delivered';
     case 'completed':
-      return 'Tapos na';
+      return 'Completed';
     case 'rejected':
-      return 'Tinanggihan ng shop';
+      return 'Declined by shop';
     case 'cancelled':
-      return 'Na-cancel';
+      return 'Cancelled';
     default:
       return s;
   }

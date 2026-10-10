@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme.dart';
 import '../state/favorites.dart';
 import 'menu_screen.dart';
 
@@ -19,21 +20,66 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const page = Color(0xFFFBF8F3);
     return Scaffold(
-      appBar: AppBar(title: const Text('❤️ Mga Paborito')),
+      backgroundColor: page,
+      appBar: AppBar(
+        backgroundColor: page,
+        leading: IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).maybePop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: espresso, size: 28),
+        ),
+        titleSpacing: 0,
+        title: const Row(
+          children: [
+            Icon(Icons.favorite_rounded, color: Color(0xFFE76565), size: 27),
+            SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Favorites',
+                    style: TextStyle(
+                      color: espresso,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    'Your cravings, saved',
+                    style: TextStyle(color: Colors.black54, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
       body: ListenableBuilder(
         listenable: Favorites.I,
         builder: (_, _) {
           final items = Favorites.I.items;
           if (items.isEmpty) {
-            return const Center(child: Text('Wala ka pang paboritong kape.\nI-tap ang ♡ sa menu.', textAlign: TextAlign.center));
+            return const Center(
+              child: Text(
+                'You have no favorite items yet.\nTap the heart on an item to save it.',
+                textAlign: TextAlign.center,
+              ),
+            );
           }
           return GridView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2, childAspectRatio: 0.78, crossAxisSpacing: 12, mainAxisSpacing: 12),
+              crossAxisCount: 2,
+              childAspectRatio: 0.67,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 14,
+            ),
             itemCount: items.length,
-            itemBuilder: (_, i) => productCard(context, items[i]),
+            itemBuilder: (_, index) => productCard(context, items[index]),
           );
         },
       ),

@@ -21,7 +21,7 @@ class LocationService {
 
   Future<bool> _ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
-      error.value = 'I-on ang Location/GPS ng phone.';
+      error.value = 'Turn on your phone location/GPS.';
       return false;
     }
     var perm = await Geolocator.checkPermission();
@@ -29,7 +29,7 @@ class LocationService {
       perm = await Geolocator.requestPermission();
     }
     if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
-      error.value = 'Kailangan ng Location permission. I-allow sa Settings.';
+      error.value = 'Location permission is required. Allow it in Settings.';
       return false;
     }
     return true;
@@ -43,7 +43,7 @@ class LocationService {
         intervalDuration: const Duration(seconds: 5),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'Coffee Rider',
-          notificationText: 'Nagpapadala ng lokasyon habang may delivery',
+          notificationText: 'Sharing location during delivery',
           enableWakeLock: true,
         ),
       );

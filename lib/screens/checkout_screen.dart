@@ -22,6 +22,7 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String _type = 'delivery';
+  String _paymentMethod = 'cod';
   LatLng? _pin;
   final _address = TextEditingController();
   final _notes = TextEditingController();
@@ -43,7 +44,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _promo.text = SelectedPromo.I.code ?? ''; // awtomatikong code mula sa Home
+    if (AppState.online) _paymentMethod = 'qrph';
+    _promo.text = SelectedPromo.I.code ?? ''; // Automatic code from Home
     _refresh();
     _loadSaved();
   }
@@ -78,12 +80,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Map<String, dynamic> _payload({bool forOrder = false}) => {
     'order_type': _type,
+    if (forOrder) 'payment_method': _paymentMethod,
     'items': Cart.I.lines.map((l) => l.toPayload()).toList(),
     if (_promo.text.trim().isNotEmpty) 'promo_code': _promo.text.trim(),
     if (_type == 'delivery' && _pin != null) 'delivery_lat': _pin!.latitude,
     if (_type == 'delivery' && _pin != null) 'delivery_lng': _pin!.longitude,
-    // The preview endpoint validates delivery_address too, so send it
-    // during both quote refreshes and final order creation.
     if (_type == 'delivery' && _pin != null) ...{
       'delivery_address': _address.text.trim().isEmpty
           ? 'GPS ${_pin!.latitude.toStringAsFixed(6)}, ${_pin!.longitude.toStringAsFixed(6)}'
@@ -467,7 +468,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   ],
                   selected: {_type},
                   onSelectionChanged: (selection) {
-                    setState(() => _type = selection.first);
+                    setState(() {
+                      _type = selection.first;
+                      if (_type == 'pickup' && _paymentMethod == 'cod') {
+                        _paymentMethod = 'cash';
+                      } else if (_type == 'delivery' &&
+                          _paymentMethod == 'cash') {
+                        _paymentMethod = 'cod';
+                      }
+                    });
                     _refresh();
                   },
                 ),
@@ -520,6 +529,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     children: [
                       ListTile(
                         dense: true,
+                        onTap: () => setState(
+                          () => _paymentMethod = _type == 'delivery'
+                              ? 'cod'
+                              : 'cash',
+                        ),
                         leading: const Icon(
                           Icons.payments_outlined,
                           color: espresso,
@@ -540,34 +554,46 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           style: const TextStyle(fontSize: 11),
                         ),
                         trailing: Icon(
-                          AppState.online
+                          _paymentMethod == 'qrph'
                               ? Icons.radio_button_unchecked
-                              : Icons.check_circle,
-                          color: AppState.online ? Colors.black38 : espresso,
+                              : Icons.radio_button_checked,
+                          color: _paymentMethod == 'qrph'
+                              ? Colors.black38
+                              : espresso,
                           size: 19,
                         ),
                       ),
                       const Divider(height: 1, indent: 54),
                       ListTile(
                         dense: true,
+                        enabled: AppState.online,
+                        onTap: AppState.online
+                            ? () => setState(() => _paymentMethod = 'qrph')
+                            : null,
                         leading: const Icon(
                           Icons.credit_card_outlined,
                           color: Colors.black45,
                         ),
                         title: const Text(
-                          'Online Payment',
+                          'QRPh',
                           style: TextStyle(fontSize: 13, color: Colors.black54),
                         ),
                         subtitle: Text(
                           AppState.online
-                              ? 'GCash payment is enabled.'
-                              : 'Coming soon',
+                              ? 'Scan and pay with any QRPh-enabled wallet or banking app.'
+                              : 'Unavailable until the shop configures online payment.',
                           style: const TextStyle(fontSize: 11),
                         ),
-                        trailing: AppState.online
+                        trailing: AppState.online && _paymentMethod == 'qrph'
                             ? const Icon(
-                                Icons.check_circle,
+                                Icons.radio_button_checked,
                                 color: espresso,
+                                size: 19,
+                              )
+                            : AppState.online
+                            ? const Icon(
+                                Icons.radio_button_unchecked,
+                                color: Colors.black38,
                                 size: 19,
                               )
                             : const Icon(
@@ -614,7 +640,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               children: [
                                 Expanded(
                                   child: Text(
-                                    '${item['qty']} ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â ${item['name']}',
+                                    '${item['qty']} × ${item['name']}',
                                     style: const TextStyle(fontSize: 12),
                                   ),
                                 ),
@@ -746,10 +772,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           AppState.online
                               ? (quote == null
                                     ? 'Continue to Payment'
-                                    : 'Continue to Payment ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${peso(dbl(quote['total']))}')
+                                    : 'Continue to Payment · ${peso(dbl(quote['total']))}')
                               : (quote == null
                                     ? 'Place Order'
-                                    : 'Place Order ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· ${peso(dbl(quote['total']))}'),
+                                    : 'Place Order · ${peso(dbl(quote['total']))}'),
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
                 ),

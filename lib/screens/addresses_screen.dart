@@ -40,11 +40,11 @@ class _AddressesScreenState extends State<AddressesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Mga Saved Address')),
+      appBar: AppBar(title: const Text('Saved Addresses')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _items.isEmpty
-              ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('Wala pang saved address.\nMakakapag-save ka habang nagche-checkout.', textAlign: TextAlign.center)))
+              ? const Center(child: Padding(padding: EdgeInsets.all(24), child: Text('No saved addresses yet.\nYou can save an address during checkout.', textAlign: TextAlign.center)))
               : ListView.builder(
                   padding: const EdgeInsets.all(12),
                   itemCount: _items.length,

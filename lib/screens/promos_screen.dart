@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../core/api.dart';
 import '../core/theme.dart';
 import '../core/util.dart';
-import '../core/widgets.dart';
 import '../state/nav.dart';
 import '../state/promo_state.dart';
 import 'product_screen.dart';
+import 'promo_carousel.dart';
 
 class PromosScreen extends StatefulWidget {
   const PromosScreen({super.key});
@@ -48,7 +48,17 @@ class _PromosScreenState extends State<PromosScreen> {
   }
 
   Future<void> _choosePromo(Map<String, dynamic> promo) async {
-    if (promo['used'] == true) return;
+    if (promo['used'] == true) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'You have already used this promo. Each customer may use it once.',
+          ),
+        ),
+      );
+      return;
+    }
 
     final alreadySelected = SelectedPromo.I.code == promo['code'];
     SelectedPromo.I.select(promo);
@@ -58,21 +68,22 @@ class _PromosScreenState extends State<PromosScreen> {
               ((promo['free_qty'] as num?)?.toInt() ?? 1)
         : 0;
 
+    // Isang alert lang, at sa unang pindot lang
     if (!alreadySelected) {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Napili ang promo!'),
+          title: const Text('Promo selected!'),
           content: Text(
             '${promo['headline'] ?? promo['title'] ?? promo['code']}\n'
-            'Code: ${promo['code'] ?? ''} (awtomatikong ilalagay sa checkout)\n'
-            '${product is Map ? 'Para sa: ${product['name']}${needed > 0 ? ' • ilalagay ang $needed piraso' : ' • piliin ang produkto'}\n' : ''}'
-            'Tingnan ang detalye ng promo bago mag-checkout.',
+            'Code: ${promo['code'] ?? ''} (it will be added at checkout)\n'
+            '${product is Map ? 'For: ${product['name']}${needed > 0 ? ' • $needed items required' : ' • 1 item only'}\n' : ''}'
+            'This promo can be used once.',
           ),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Magpatuloy'),
+              child: const Text('Continue'),
             ),
           ],
         ),
@@ -107,206 +118,68 @@ class _PromosScreenState extends State<PromosScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: _loading
-            ? ListView(
-                children: [
-                  SizedBox(height: 240),
-                  Center(child: CircularProgressIndicator()),
-                ],
-              )
-            : _error != null
-            ? ListView(
-                children: [
-                  const SizedBox(height: 120),
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(_error!, textAlign: TextAlign.center),
-                    ),
-                  ),
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: _load,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Subukan ulit'),
-                    ),
-                  ),
-                ],
-              )
-            : _promos.isEmpty
-            ? ListView(
-                children: const [
-                  SizedBox(height: 130),
-                  Icon(
-                    Icons.local_offer_outlined,
-                    size: 48,
-                    color: Color(0xFF9A9189),
-                  ),
-                  SizedBox(height: 14),
-                  Center(child: Text('Wala pang promo na ipinost ang admin.')),
-                ],
-              )
-            : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
-                itemCount: _promos.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 14),
-                itemBuilder: (_, index) => _promoCard(_promos[index]),
-              ),
-      ),
+      body: RefreshIndicator(onRefresh: _load, child: _body()),
     );
   }
 
-  Widget _promoCard(Map<String, dynamic> promo) {
-    final imageUrl = (promo['image_url'] ?? '').toString();
-    final used = promo['used'] == true;
-    final code = (promo['code'] ?? '').toString();
-    final title = (promo['title'] ?? '').toString().trim();
-    final headline = (promo['headline'] ?? '').toString().trim();
-    final description = (promo['description'] ?? '').toString().trim();
+  Widget _body() {
+    const scroll = AlwaysScrollableScrollPhysics();
 
-    return ListenableBuilder(
-      listenable: SelectedPromo.I,
-      builder: (_, _) {
-        final selected = SelectedPromo.I.code == code;
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.07),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+    if (_loading) {
+      return ListView(
+        physics: scroll,
+        children: const [
+          SizedBox(height: 240),
+          Center(child: CircularProgressIndicator()),
+        ],
+      );
+    }
+
+    if (_error != null) {
+      return ListView(
+        physics: scroll,
+        children: [
+          const SizedBox(height: 120),
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(_error!, textAlign: TextAlign.center),
+            ),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: double.infinity,
-                height: 190,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Container(
-                      color: const Color(0xFFFFFCF7),
-                      alignment: Alignment.center,
-                      child: imageUrl.isEmpty
-                          ? const Icon(
-                              Icons.local_cafe_outlined,
-                              size: 48,
-                              color: Color(0xFF9A9189),
-                            )
-                          : NetImage(imageUrl, fit: BoxFit.contain),
-                    ),
-                    if (used)
-                      Align(
-                        alignment: Alignment.topRight,
-                        child: Container(
-                          margin: const EdgeInsets.all(10),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xEEFFFFFF),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Text(
-                            'Nagamit na',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 13, 14, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (title.isNotEmpty)
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Color(0xFF756C65),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    if (headline.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        headline,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          color: espresso,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                    if (description.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        description,
-                        style: const TextStyle(fontSize: 14, height: 1.35),
-                      ),
-                    ],
-                    if (code.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF3E9DC),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Promo code: $code',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: espresso,
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: used ? null : () => _choosePromo(promo),
-                        icon: Icon(
-                          selected
-                              ? Icons.check_circle_outline
-                              : Icons.local_offer_outlined,
-                        ),
-                        label: Text(
-                          used
-                              ? 'Nagamit na'
-                              : selected
-                              ? 'Napili na - Gamitin'
-                              : 'Gamitin ang promo',
-                        ),
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(46),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Center(
+            child: TextButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
           ),
+        ],
+      );
+    }
+
+    if (_promos.isEmpty) {
+      return ListView(
+        physics: scroll,
+        children: const [
+          SizedBox(height: 130),
+          Icon(Icons.local_offer_outlined, size: 48, color: Color(0xFF9A9189)),
+          SizedBox(height: 14),
+          Center(child: Text('No promos available right now.')),
+        ],
+      );
+    }
+
+    return ListView.separated(
+      physics: scroll,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      itemCount: _promos.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 16),
+      itemBuilder: (_, index) {
+        final promo = _promos[index];
+        return PromoBannerCard(
+          promo: promo,
+          aspectRatio: 2,
+          onTap: () => _choosePromo(promo),
         );
       },
     );

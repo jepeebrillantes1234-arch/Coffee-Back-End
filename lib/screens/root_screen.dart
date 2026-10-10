@@ -390,38 +390,54 @@ class _CustomerDrawerState extends State<_CustomerDrawer> {
     Color? color,
     int? badgeCount,
   }) {
-    return ListTile(
-      leading: Icon(icon, color: color ?? espresso),
-      trailing: badgeCount != null && badgeCount > 0
-          ? Container(
-              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: const BoxDecoration(
-                color: Color(0xFFE86B68),
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                badgeCount.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
+    return InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 56,
+        width: double.infinity,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Icon(icon, color: color ?? espresso),
+              const SizedBox(width: 32),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: color ?? espresso,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            )
-          : null,
-      title: Text(
-        label,
-        style: TextStyle(
-          color: color ?? espresso,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
+              if (badgeCount != null && badgeCount > 0) ...[
+                const SizedBox(width: 12),
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE86B68),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    badgeCount.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
-      onTap: onTap,
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
     );
   }
 }
@@ -450,7 +466,7 @@ class _AccountScreenState extends State<_AccountScreen> {
       if (mounted) {
         setState(() {});
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Na-update ang profile photo')),
+          const SnackBar(content: Text('Profile photo updated.')),
         );
       }
     } on ApiException catch (e) {
@@ -463,7 +479,7 @@ class _AccountScreenState extends State<_AccountScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Hindi mabuksan ang gallery o ma-upload ang larawan.',
+              'Could not open the gallery or upload the photo.',
             ),
           ),
         );
@@ -540,14 +556,14 @@ class _AccountScreenState extends State<_AccountScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('I-edit ang profile'),
+        title: const Text('Edit profile'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Pangalan'),
+                decoration: const InputDecoration(labelText: 'Name'),
               ),
               TextField(
                 controller: phone,
@@ -558,8 +574,8 @@ class _AccountScreenState extends State<_AccountScreen> {
                 controller: pass,
                 obscureText: true,
                 decoration: const InputDecoration(
-                  labelText: 'Bagong password (opsyonal)',
-                  helperText: 'Hindi bababa sa 8 character',
+                  labelText: 'New password (optional)',
+                  helperText: 'At least 8 characters',
                 ),
               ),
             ],
@@ -568,12 +584,12 @@ class _AccountScreenState extends State<_AccountScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Kanselahin'),
+            child: const Text('Cancel'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size(100, 44)),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('I-save'),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -590,7 +606,7 @@ class _AccountScreenState extends State<_AccountScreen> {
         setState(() {});
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Na-update ang profile')));
+        ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
       }
     } on ApiException catch (e) {
       if (mounted)
@@ -604,19 +620,19 @@ class _AccountScreenState extends State<_AccountScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Burahin ang account?'),
+        title: const Text('Delete account?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Mabubura ang iyong account at mawawala ang access dito.',
+              'Your account will be deleted and you will lose access to it.',
             ),
             const SizedBox(height: 12),
             TextField(
               controller: password,
               obscureText: true,
               decoration: const InputDecoration(
-                labelText: 'Ilagay ang password para kumpirmahin',
+                labelText: 'Enter your password to confirm',
               ),
             ),
           ],
@@ -624,11 +640,11 @@ class _AccountScreenState extends State<_AccountScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Kanselahin'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Burahin'),
+            child: const Text('Delete'),
           ),
         ],
       ),
@@ -678,20 +694,20 @@ class _AccountScreenState extends State<_AccountScreen> {
           children: [
             ListTile(
               leading: const Icon(Icons.edit_outlined),
-              title: const Text('I-edit ang profile'),
+              title: const Text('Edit profile'),
               onTap: () => Navigator.pop(context, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
               title: const Text(
-                'Burahin ang account',
+                'Delete account',
                 style: TextStyle(color: Colors.red),
               ),
               onTap: () => Navigator.pop(context, 'delete'),
             ),
             ListTile(
               leading: const Icon(Icons.logout_rounded),
-              title: const Text('Mag-log out'),
+              title: const Text('Log out'),
               onTap: () => Navigator.pop(context, 'logout'),
             ),
             const SizedBox(height: 8),
@@ -711,12 +727,12 @@ class _AccountScreenState extends State<_AccountScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Payment methods'),
         content: const Text(
-          'Piliin ang available na paraan ng bayad sa checkout. Depende sa order, maaaring Cash on Delivery o GCash ang pagpipilian.',
+          'Choose an available payment method at checkout. Depending on the order, you can pay with Cash on Delivery or GCash.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Sige'),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -729,12 +745,12 @@ class _AccountScreenState extends State<_AccountScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Help & Support'),
         content: const Text(
-          'Para sa tulong tungkol sa order, buksan ang Orders at piliin ang order para makita ang status at rider details.',
+          'For help with an order, open Orders and select it to view its status and rider details.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Isara'),
+            child: const Text('Close'),
           ),
         ],
       ),
@@ -847,7 +863,7 @@ class _AccountScreenState extends State<_AccountScreen> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'I-edit ang profile',
+                  tooltip: 'Edit profile',
                   onPressed: _editProfile,
                   icon: const Icon(Icons.edit_outlined, size: 20),
                 ),

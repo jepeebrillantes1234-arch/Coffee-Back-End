@@ -44,20 +44,20 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
       final x = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70, maxWidth: 1400);
       if (x != null) setState(() => _photo = x);
     } catch (e) {
-      setState(() => _error = 'Hindi mabuksan ang camera. Payagan ang Camera permission.');
+      setState(() => _error = 'Could not open the camera. Allow camera access in Settings.');
     }
   }
 
   Future<void> _submit() async {
     if (_photo == null) {
-      setState(() => _error = 'Kumuha muna ng larawan bilang patunay.');
+      setState(() => _error = 'Take a photo as delivery proof first.');
       return;
     }
     double? cash;
     if (_cod) {
       cash = double.tryParse(_cash.text.trim());
       if (cash == null || cash < 0) {
-        setState(() => _error = 'Ilagay ang cash na natanggap mo.');
+        setState(() => _error = 'Enter the cash amount you received.');
         return;
       }
     }
@@ -70,7 +70,7 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
       await Api.I.deliverWithProof(widget.deliveryId, _photo!.path, cash);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(_cod ? 'Na-deliver na! Ibigay ang cash sa staff ng shop.' : 'Na-deliver na!'),
+        content: Text(_cod ? 'Delivered! Hand the cash to the shop staff.' : 'Delivered!'),
       ));
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
@@ -86,15 +86,15 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
     final differs = _cod && entered != null && (entered - _total).abs() > 0.009;
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: riderGreen, title: const Text('Patunay ng Delivery')),
+      appBar: AppBar(backgroundColor: riderGreen, title: const Text('Delivery Proof')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Text('${widget.order['order_number']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 14),
 
         // 1. LARAWAN
-        const Text('1. Larawan ng naihatid na order', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+        const Text('1. Photo of the delivered order', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
         const SizedBox(height: 4),
-        const Text('Kunan ang order na hawak ng customer, o ang order sa tapat ng bahay.', style: TextStyle(fontSize: 12.5, color: Colors.black54)),
+        const Text('Photograph the order with the customer or at the delivery address.', style: TextStyle(fontSize: 12.5, color: Colors.black54)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _take,
@@ -107,7 +107,7 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
             ),
             clipBehavior: Clip.antiAlias,
             child: _photo == null
-                ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.photo_camera, size: 48, color: riderGreen), SizedBox(height: 6), Text('I-tap para kumuha ng larawan')]))
+                ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.photo_camera, size: 48, color: riderGreen), SizedBox(height: 6), Text('Tap to take a photo')]))
                 : Image.file(File(_photo!.path), fit: BoxFit.cover, width: double.infinity),
           ),
         ),
@@ -116,15 +116,15 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(46)),
           onPressed: _busy ? null : _take,
           icon: const Icon(Icons.photo_camera_outlined),
-          label: Text(_photo == null ? 'Kumuha ng larawan' : 'Kunin ulit'),
+          label: Text(_photo == null ? 'Take photo' : 'Retake photo'),
         ),
 
         // 2. CASH
         if (_cod) ...[
           const SizedBox(height: 20),
-          const Text('2. Cash na natanggap mo', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
+          const Text('2. Cash received', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           const SizedBox(height: 4),
-          Text('Dapat bayaran ng customer: ${peso(_total)}', style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
+          Text('Amount due from customer: ${peso(_total)}', style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
           const SizedBox(height: 8),
           TextField(
             controller: _cash,
@@ -135,13 +135,13 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
           if (differs)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text('⚠ Iba ito sa kabuuang ${peso(_total)}. Makikita ito ng staff.', style: TextStyle(color: Colors.amber.shade900, fontSize: 12.5)),
+              child: Text('⚠ This differs from the total of ${peso(_total)}. Shop staff will see this.', style: TextStyle(color: Colors.amber.shade900, fontSize: 12.5)),
             ),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.amber.shade200)),
-            child: const Text('💵 Ibigay ang cash sa staff ng shop. Magiging "tapos na" lang ang order kapag natanggap na nila ang pera.', style: TextStyle(height: 1.4)),
+            child: const Text('💵 Hand the cash to the shop staff. The order will be completed after they receive the payment.', style: TextStyle(height: 1.4)),
           ),
         ],
 
@@ -155,7 +155,7 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
           onPressed: _busy ? null : _submit,
           child: _busy
               ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('I-submit ang Delivery'),
+              : const Text('Submit delivery'),
         ),
         const SizedBox(height: 24),
       ]),

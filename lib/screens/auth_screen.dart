@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api.dart';
+import '../core/config.dart';
 import '../core/role_home.dart';
 import '../core/theme.dart';
 
-/// Set to true if you want to show Google/Apple buttons.
-/// These are not working yet, so they are turned off for now.
-const bool kShowSocialLogin = false;
+final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+Future<void>? _googleSignInInitialization;
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, this.initialRegister = false});
@@ -79,27 +80,133 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  void _forgot() {
-    showDialog<void>(
+  Future<void> _forgot() async {
+    final emailController = TextEditingController(
+      text: _email.text.contains('@') ? _email.text.trim() : '',
+    );
+    var sending = false;
+    String? error;
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Forgot password?'),
-        content: const Text(
-          'Automatic password reset is not available yet. Please contact KJM Coffee for assistance.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, dialogSetState) => AlertDialog(
+          title: const Text('Reset your password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Enter your account email and we will send a password reset link.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(
+                  labelText: 'Email address',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(error!, style: const TextStyle(color: Colors.red)),
+              ],
+            ],
           ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: sending ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: sending
+                  ? null
+                  : () async {
+                      final email = emailController.text.trim();
+                      if (!email.contains('@')) {
+                        dialogSetState(
+                          () => error = 'Enter a valid email address.',
+                        );
+                        return;
+                      }
+                      dialogSetState(() {
+                        sending = true;
+                        error = null;
+                      });
+                      try {
+                        await Api.I.forgotPassword(email);
+                        if (!mounted || !ctx.mounted) return;
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'If that email is registered, a reset link has been sent.',
+                            ),
+                          ),
+                        );
+                      } on ApiException catch (e) {
+                        if (ctx.mounted) {
+                          dialogSetState(() {
+                            sending = false;
+                            error = e.message;
+                          });
+                        }
+                      }
+                    },
+              child: sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Send reset link'),
+            ),
+          ],
+        ),
       ),
     );
+    emailController.dispose();
   }
 
-  void _soon(String what) {
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('$what login coming soon.')));
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      if (AppConfig.googleServerClientId.isEmpty) {
+        throw ApiException(
+          'Google sign-in needs a Web OAuth client ID. Configure GOOGLE_SERVER_CLIENT_ID and rebuild the app.',
+        );
+      }
+      _googleSignInInitialization ??= _googleSignIn.initialize(
+        serverClientId: AppConfig.googleServerClientId,
+      );
+      await _googleSignInInitialization;
+      final account = await _googleSignIn.authenticate();
+      final idToken = account.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw ApiException('Google did not return a valid sign-in token.');
+      }
+      await Api.I.loginWithGoogle(idToken);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('remember_me', true);
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => homeForRole(Api.I.role)),
+      );
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Google sign-in was cancelled or could not be completed.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   OutlineInputBorder _border(Color c, [double w = 1]) => OutlineInputBorder(
@@ -342,8 +449,8 @@ class _AuthScreenState extends State<AuthScreen> {
                             ),
                     ),
 
-                    // ---------- GOOGLE / APPLE (turned off) ----------
-                    if (kShowSocialLogin) ...[
+                    // ---------- GOOGLE SIGN-IN ----------
+                    if (!_register) ...[
                       const SizedBox(height: 20),
                       Row(
                         children: const [
@@ -361,25 +468,20 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 16),
                       _socialButton(
                         label: 'Continue with Google',
-                        icon: const Text(
-                          'G',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF4285F4),
+                        icon: Image.asset(
+                          'assets/images/google.png',
+                          width: 22,
+                          height: 22,
+                          errorBuilder: (_, __, ___) => const Text(
+                            'G',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF4285F4),
+                            ),
                           ),
                         ),
-                        onTap: () => _soon('Google'),
-                      ),
-                      const SizedBox(height: 10),
-                      _socialButton(
-                        label: 'Continue with Apple',
-                        icon: const Icon(
-                          Icons.apple,
-                          size: 26,
-                          color: Colors.black,
-                        ),
-                        onTap: () => _soon('Apple'),
+                        onTap: _busy ? () {} : _signInWithGoogle,
                       ),
                     ],
 
@@ -450,5 +552,3 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 }
-
-

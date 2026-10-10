@@ -41,11 +41,12 @@ dependencies:
   latlong2: ^0.10.1
   url_launcher: ^6.3.2
   image_picker: ^1.2.4
-
+  google_sign_in: ^7.2.0
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_native_splash: ^2.4.0
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -65,6 +66,12 @@ flutter:
   uses-material-design: true
   assets:
        - assets/images/
+
+flutter_native_splash:
+  color: "#121212" # Kulay ng background (Dark mode)
+  image: "assets/images/logo1.png" # Ilagay dito ang path ng logo o image mo
+  android: true
+  ios: true
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

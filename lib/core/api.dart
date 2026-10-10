@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -131,7 +131,7 @@ class Api {
       final data = res.data;
       if (data is Map) return Map<String, dynamic>.from(data);
       throw ApiException(
-        'Hindi JSON ang sagot ng server. Tingnan ang URL sa config.dart.',
+        'The server returned invalid JSON. Check the URL in config.dart.',
       );
     } on DioException catch (e) {
       final code = e.response?.statusCode;
@@ -142,7 +142,7 @@ class Api {
 
       if (code == 401 && auth && tokenOverride == null) {
         await _save(null, null);
-        throw ApiException('Nag-expire ang login. Mag-login ulit.');
+        throw ApiException('Your session expired. Please log in again.');
       }
       if (d is Map) {
         final errs = d['errors'];
@@ -156,10 +156,9 @@ class Api {
         }
         if (d['message'] != null) throw ApiException(d['message'].toString());
       }
-      if (code != null)
-        throw ApiException('May error sa server (status $code).');
+      if (code != null) throw ApiException('Server error (status $code).');
       throw ApiException(
-        'Hindi makakonekta sa server. Tingnan ang URL at internet.',
+        'Could not connect to the server. Check the URL and your internet connection.',
       );
     }
   }
@@ -182,10 +181,33 @@ class Api {
         await _call('POST', '/auth/logout', tokenOverride: token);
       } catch (_) {}
       throw ApiException(
-        'Para sa Customer at Rider lang ang app na ito. Gamitin ang web panel para sa Staff/Admin.',
+        'This app is for customers and riders. Staff and admins should use the web panel.',
       );
     }
     await _save(token, u);
+  }
+
+  Future<void> loginWithGoogle(String idToken) async {
+    final r = await _call(
+      'POST',
+      '/auth/google',
+      body: {'id_token': idToken, 'device_name': 'kjm-google-app'},
+      auth: false,
+    );
+    final data = Map<String, dynamic>.from(_d(r) as Map);
+    await _save(
+      data['token'] as String,
+      Map<String, dynamic>.from(data['user'] as Map),
+    );
+  }
+
+  Future<void> forgotPassword(String email) async {
+    await _call(
+      'POST',
+      '/auth/forgot-password',
+      body: {'email': email},
+      auth: false,
+    );
   }
 
   Future<void> register(
@@ -276,6 +298,10 @@ class Api {
 
   Future<void> cancel(int id) async {
     await _call('POST', '/orders/$id/cancel');
+  }
+
+  Future<void> deleteOrder(int id) async {
+    await _call('DELETE', '/orders/$id');
   }
 
   Future<void> review(int id, int rating, String comment) async {
@@ -373,7 +399,7 @@ class Api {
     final payload = response['data'] ?? response;
     if (payload is! Map) {
       throw ApiException(
-        'Na-upload ang larawan pero walang profile data sa sagot ng server.',
+        'The photo uploaded, but the server did not return profile data.',
       );
     }
     final body = Map<String, dynamic>.from(payload);
@@ -383,7 +409,7 @@ class Api {
         : (body['id'] != null || body['name'] != null ? body : null);
     if (user == null) {
       throw ApiException(
-        body['message']?.toString() ?? 'Hindi naibalik ng server ang profile pagkatapos mag-upload. Tingnan ang /profile response sa Laravel API.',
+        body['message']?.toString() ?? 'The server did not return the profile after upload. Check the Laravel API /profile response.',
       );
     }
     await _save(_token, user);
