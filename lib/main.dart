@@ -9,6 +9,7 @@ import 'screens/splash_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Api.I.init();
+  await AppThemeController.I.load();
   runApp(const KjmApp());
 }
 
@@ -17,12 +18,19 @@ class KjmApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'KJM Coffee Brew',
-      debugShowCheckedModeBanner: false,
-      theme: appTheme(),
-      home: SplashScreen(
-        nextScreen: Api.I.loggedIn ? homeForRole(Api.I.role) : const GetStartedScreen(),
+    return ListenableBuilder(
+      listenable: AppThemeController.I,
+      builder: (context, _) => MaterialApp(
+        title: 'KJM Coffee Brew',
+        debugShowCheckedModeBanner: false,
+        themeMode: AppThemeController.I.mode,
+        theme: appTheme(ThemeMode.light),
+        darkTheme: appTheme(ThemeMode.dark),
+        home: SplashScreen(
+          nextScreen: Api.I.loggedIn
+              ? homeForRole(Api.I.role)
+              : const GetStartedScreen(),
+        ),
       ),
     );
   }

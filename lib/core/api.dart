@@ -212,19 +212,23 @@ class Api {
 
   Future<void> register(
     String name,
+    String username,
     String email,
     String phone,
     String password,
+    String passwordConfirmation,
   ) async {
     final r = await _call(
       'POST',
       '/auth/register',
       body: {
         'name': name,
+        'username': username,
         'email': email,
         'phone': phone,
         if (phone.isNotEmpty) 'phone': phone,
         'password': password,
+        'password_confirmation': passwordConfirmation,
         'device_name': 'customer-app',
       },
       auth: false,
@@ -375,7 +379,6 @@ class Api {
   Future<void> updateProfile({
     String? name,
     String? phone,
-    String? password,
   }) async {
     final r = await _call(
       'PUT',
@@ -383,11 +386,26 @@ class Api {
       body: {
         if (name != null && name.isNotEmpty) 'name': name,
         if (phone != null) 'phone': phone.isEmpty ? null : phone,
-        if (password != null && password.isNotEmpty) 'password': password,
       },
     );
     final u = Map<String, dynamic>.from(_d(r) as Map);
     await _save(_token, u);
+  }
+
+  Future<void> changePassword({
+    required String currentPassword,
+    required String password,
+    required String passwordConfirmation,
+  }) async {
+    await _call(
+      'PUT',
+      '/profile',
+      body: {
+        'current_password': currentPassword,
+        'password': password,
+        'password_confirmation': passwordConfirmation,
+      },
+    );
   }
 
   Future<void> uploadAvatar(String filePath) async {
@@ -437,6 +455,21 @@ class Api {
 
   Future<Map<String, dynamic>> history() async => Map<String, dynamic>.from(
     _d(await _call('GET', '/rider/history')) as Map,
+  );
+
+  Future<Map<String, dynamic>> riderProfile() async =>
+      Map<String, dynamic>.from(_d(await _call('GET', '/rider/profile')) as Map);
+
+  Future<Map<String, dynamic>> updateRiderVehicle({
+    required String vehicleType,
+    required String plateNumber,
+    required String licenseNumber,
+  }) async => Map<String, dynamic>.from(
+    _d(await _call('PUT', '/rider/profile', body: {
+      'vehicle_type': vehicleType,
+      'plate_number': plateNumber,
+      'license_no': licenseNumber,
+    })) as Map,
   );
 
   Future<Map<String, dynamic>> delivery(int id) async =>

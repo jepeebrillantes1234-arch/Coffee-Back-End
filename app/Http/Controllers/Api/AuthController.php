@@ -81,9 +81,17 @@ class AuthController extends Controller
         $data = $request->validate([
             'name'     => 'sometimes|string|max:100',
             'phone'    => 'sometimes|nullable|string|max:20|unique:users,phone,' . $user->id,
-            'password' => 'sometimes|string|min:8',
+            'current_password' => 'required_with:password|string',
+            'password' => 'sometimes|string|min:8|confirmed',
             'avatar'   => 'sometimes|image|max:2048',
         ]);
+
+        if (isset($data['password'])) {
+            if (!Hash::check($data['current_password'], $user->password)) {
+                return $this->fail('Your current password is incorrect.', 422);
+            }
+            unset($data['current_password']);
+        }
 
         if ($request->hasFile('avatar')) {
             if ($user->avatar) Storage::disk('public')->delete($user->avatar);

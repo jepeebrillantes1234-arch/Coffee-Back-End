@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 
-/// Kulay ng Rider mode (berde) para madaling makilala laban sa Customer mode
+/// Rider theme accent color.
 const riderGreen = Color(0xFF1F3D2F);
+
+Color riderAccent(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF79C9A2)
+        : riderGreen;
 
 String deliveryStatusLabel(String s) {
   switch (s) {
     case 'assigned':
       return 'New assignment';
     case 'accepted':
-      return 'Tinanggap';
+      return 'Accepted';
     case 'picked_up':
       return 'Order picked up';
     case 'on_the_way':
-      return 'On the way to customer';
+      return 'On the way';
+    case 'declined':
+      return 'Declined';
     case 'delivered':
       return 'Delivered';
     default:
@@ -26,6 +33,8 @@ Color deliveryStatusColor(String s) {
       return Colors.amber.shade800;
     case 'accepted':
       return Colors.blue.shade700;
+    case 'declined':
+      return Colors.red.shade700;
     case 'picked_up':
       return Colors.indigo;
     case 'on_the_way':

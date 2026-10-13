@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "KJM Coffee Customer (Google Sign-In)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define=GOOGLE_SERVER_CLIENT_ID=776313233164-512fb8183e640nn7b19gffa44i0m34ui.apps.googleusercontent.com"
+      ]
+    }
+  ]
+}

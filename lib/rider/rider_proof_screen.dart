@@ -24,7 +24,9 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
   bool _busy = false;
   String? _error;
 
-  bool get _cod => widget.order['payment_method'] == 'cod';
+  bool get _cod =>
+      widget.order['payment_method'] == 'cod' &&
+      widget.order['payment_status'] != 'paid';
   double get _total => dbl(widget.order['total']);
 
   @override
@@ -42,9 +44,9 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
   Future<void> _take() async {
     try {
       final x = await ImagePicker().pickImage(source: ImageSource.camera, imageQuality: 70, maxWidth: 1400);
-      if (x != null) setState(() => _photo = x);
+      if (x != null && mounted) setState(() => _photo = x);
     } catch (e) {
-      setState(() => _error = 'Could not open the camera. Allow camera access in Settings.');
+      if (mounted) setState(() => _error = 'Could not open the camera. Allow camera access in Settings.');
     }
   }
 
@@ -56,8 +58,8 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
     double? cash;
     if (_cod) {
       cash = double.tryParse(_cash.text.trim());
-      if (cash == null || cash < 0) {
-        setState(() => _error = 'Enter the cash amount you received.');
+      if (cash == null || cash < _total) {
+        setState(() => _error = 'The cash received must cover the order total of ${peso(_total)}.');
         return;
       }
     }
@@ -84,9 +86,10 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
   Widget build(BuildContext context) {
     final entered = double.tryParse(_cash.text.trim());
     final differs = _cod && entered != null && (entered - _total).abs() > 0.009;
+    final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: riderGreen, title: const Text('Delivery Proof')),
+      appBar: AppBar(title: const Text('Delivery Proof')),
       body: ListView(padding: const EdgeInsets.all(16), children: [
         Text('${widget.order['order_number']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
         const SizedBox(height: 14),
@@ -94,14 +97,14 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
         // 1. LARAWAN
         const Text('1. Photo of the delivered order', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
         const SizedBox(height: 4),
-        const Text('Photograph the order with the customer or at the delivery address.', style: TextStyle(fontSize: 12.5, color: Colors.black54)),
+        Text('Photograph the order with the customer or at the delivery address.', style: TextStyle(fontSize: 12.5, color: secondary)),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _take,
           child: Container(
             height: 240,
             decoration: BoxDecoration(
-              color: Colors.white,
+            color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.black12),
             ),
@@ -124,18 +127,18 @@ class _RiderProofScreenState extends State<RiderProofScreen> {
           const SizedBox(height: 20),
           const Text('2. Cash received', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16)),
           const SizedBox(height: 4),
-          Text('Amount due from customer: ${peso(_total)}', style: const TextStyle(fontSize: 12.5, color: Colors.black54)),
+          Text('Amount due from customer: ${peso(_total)}', style: TextStyle(fontSize: 12.5, color: secondary)),
           const SizedBox(height: 8),
           TextField(
             controller: _cash,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(prefixText: '₱ ', border: OutlineInputBorder(), filled: true, fillColor: Colors.white),
+            decoration: const InputDecoration(prefixText: '₱ ', border: OutlineInputBorder(), filled: true),
           ),
           if (differs)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text('⚠ This differs from the total of ${peso(_total)}. Shop staff will see this.', style: TextStyle(color: Colors.amber.shade900, fontSize: 12.5)),
+              child: Text('⚠ The order is recorded at ${peso(_total)}. Return any extra cash to the customer as change.', style: TextStyle(color: Colors.amber.shade900, fontSize: 12.5)),
             ),
           const SizedBox(height: 10),
           Container(

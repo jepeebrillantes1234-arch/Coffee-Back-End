@@ -29,22 +29,28 @@ class RootScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<int>(
       valueListenable: rootTab,
-      builder: (_, tab, _) => Scaffold(
-        key: rootScaffoldKey,
-        drawer: const _CustomerDrawer(),
-        body: IndexedStack(
-          index: tab,
-          children: const [
-            HomeScreen(),
-            MenuScreen(),
-            CartScreen(),
-            OrdersScreen(),
-            _AccountScreen(),
-          ],
-        ),
-        bottomNavigationBar: _BottomBar(
-          index: tab,
-          onTap: (i) => rootTab.value = i,
+      builder: (_, tab, _) => PopScope<Object?>(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop && rootTab.value != 0) rootTab.value = 0;
+        },
+        child: Scaffold(
+          key: rootScaffoldKey,
+          drawer: const _CustomerDrawer(),
+          body: IndexedStack(
+            index: tab,
+            children: const [
+              HomeScreen(),
+              MenuScreen(),
+              CartScreen(),
+              OrdersScreen(),
+              _AccountScreen(),
+            ],
+          ),
+          bottomNavigationBar: _BottomBar(
+            index: tab,
+            onTap: (i) => rootTab.value = i,
+          ),
         ),
       ),
     );
@@ -67,9 +73,9 @@ class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFFFFFCF7),
-        border: Border(top: BorderSide(color: Color(0xFFE9E1D8))),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
       ),
       child: SafeArea(
         top: false,
@@ -96,8 +102,8 @@ class _BottomBar extends StatelessWidget {
                                 item.$2,
                                 size: 23,
                                 color: item.$1 == index
-                                    ? espresso
-                                    : const Color(0xFF837A73),
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
                             ),
                           )
@@ -106,8 +112,8 @@ class _BottomBar extends StatelessWidget {
                             item.$2,
                             size: 23,
                             color: item.$1 == index
-                                ? espresso
-                                : const Color(0xFF837A73),
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         const SizedBox(height: 3),
                         Text(
@@ -115,8 +121,8 @@ class _BottomBar extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10,
                             color: item.$1 == index
-                                ? espresso
-                                : const Color(0xFF837A73),
+                                ? Theme.of(context).colorScheme.primary
+                                : Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -208,7 +214,7 @@ class _CustomerDrawerState extends State<_CustomerDrawer> {
   Widget build(BuildContext context) {
     final user = Api.I.user ?? {};
     return Drawer(
-      backgroundColor: const Color(0xFFFFFCF7),
+      backgroundColor: Theme.of(context).colorScheme.surface,
       child: SafeArea(
         child: Column(
           children: [
@@ -274,24 +280,6 @@ class _CustomerDrawerState extends State<_CustomerDrawer> {
                               color: espresso,
                             ),
                           ),
-                          if ('${user['email'] ?? ''}'.isNotEmpty)
-                            Text(
-                              '${user['email']}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF74675E),
-                              ),
-                            ),
-                          if ('${user['phone'] ?? ''}'.isNotEmpty)
-                            Text(
-                              '${user['phone']}',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFF74675E),
-                              ),
-                            ),
                         ],
                       ),
                     ),
@@ -551,8 +539,6 @@ class _AccountScreenState extends State<_AccountScreen> {
     final u = Api.I.user ?? {};
     final name = TextEditingController(text: '${u['name'] ?? ''}');
     final phone = TextEditingController(text: '${u['phone'] ?? ''}');
-    final pass = TextEditingController();
-
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -563,20 +549,13 @@ class _AccountScreenState extends State<_AccountScreen> {
             children: [
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Name'),
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Full name'),
               ),
               TextField(
                 controller: phone,
                 keyboardType: TextInputType.phone,
-                decoration: const InputDecoration(labelText: 'Phone'),
-              ),
-              TextField(
-                controller: pass,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'New password (optional)',
-                  helperText: 'At least 8 characters',
-                ),
+                decoration: const InputDecoration(labelText: 'Phone number'),
               ),
             ],
           ),
@@ -588,31 +567,124 @@ class _AccountScreenState extends State<_AccountScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(minimumSize: const Size(100, 44)),
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () {
+              if (name.text.trim().isEmpty) return;
+              Navigator.pop(ctx, true);
+            },
             child: const Text('Save'),
           ),
         ],
       ),
     );
-    if (ok != true) return;
-
-    try {
-      await Api.I.updateProfile(
-        name: name.text.trim(),
-        phone: phone.text.trim(),
-        password: pass.text,
-      );
-      if (mounted) {
-        setState(() {});
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
+    if (ok == true) {
+      try {
+        await Api.I.updateProfile(
+          name: name.text.trim(),
+          phone: phone.text.trim(),
+        );
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Profile updated.')));
+        }
+      } on ApiException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
       }
-    } on ApiException catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
     }
+    name.dispose();
+    phone.dispose();
+  }
+
+  Future<void> _changePassword() async {
+    final current = TextEditingController();
+    final next = TextEditingController();
+    final confirm = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change password'),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: current,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: 'Current password'),
+                  validator: (value) => (value == null || value.isEmpty)
+                      ? 'Enter your current password'
+                      : null,
+                ),
+                TextFormField(
+                  controller: next,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New password',
+                    helperText: 'Use at least 8 characters',
+                  ),
+                  validator: (value) => (value == null || value.length < 8)
+                      ? 'Password must be at least 8 characters'
+                      : null,
+                ),
+                TextFormField(
+                  controller: confirm,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm new password',
+                  ),
+                  validator: (value) => value != next.text
+                      ? 'Passwords do not match'
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.pop(ctx, true);
+              }
+            },
+            child: const Text('Update password'),
+          ),
+        ],
+      ),
+    );
+    if (accepted == true) {
+      try {
+        await Api.I.changePassword(
+          currentPassword: current.text,
+          password: next.text,
+          passwordConfirmation: confirm.text,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Password updated successfully.')),
+          );
+        }
+      } on ApiException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
+    }
+    current.dispose();
+    next.dispose();
+    confirm.dispose();
   }
 
   Future<void> _deleteAccount() async {
@@ -689,34 +761,56 @@ class _AccountScreenState extends State<_AccountScreen> {
       context: context,
       showDragHandle: true,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Edit profile'),
-              onTap: () => Navigator.pop(context, 'edit'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text(
-                'Delete account',
-                style: TextStyle(color: Colors.red),
+        child: StatefulBuilder(
+          builder: (context, sheetSetState) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.edit_outlined),
+                title: const Text('Edit profile'),
+                subtitle: const Text('Change your full name or phone number'),
+                onTap: () => Navigator.pop(context, 'edit'),
               ),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded),
-              title: const Text('Log out'),
-              onTap: () => Navigator.pop(context, 'logout'),
-            ),
-            const SizedBox(height: 8),
-          ],
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: const Text('Change password'),
+                onTap: () => Navigator.pop(context, 'password'),
+              ),
+              SwitchListTile.adaptive(
+                secondary: Icon(AppThemeController.I.mode == ThemeMode.dark
+                    ? Icons.dark_mode_outlined
+                    : Icons.light_mode_outlined),
+                title: const Text('Dark mode'),
+                value: AppThemeController.I.mode == ThemeMode.dark,
+                onChanged: (enabled) async {
+                  await AppThemeController.I.setMode(
+                    enabled ? ThemeMode.dark : ThemeMode.light,
+                  );
+                  sheetSetState(() {});
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline, color: Colors.red),
+                title: const Text(
+                  'Delete account',
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('Log out'),
+                onTap: () => Navigator.pop(context, 'logout'),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
         ),
       ),
     );
     if (!mounted) return;
     if (action == 'edit') await _editProfile();
+    if (action == 'password') await _changePassword();
     if (action == 'delete') await _deleteAccount();
     if (action == 'logout') await _logout();
   }
@@ -770,28 +864,28 @@ class _AccountScreenState extends State<_AccountScreen> {
     );
   }
 
-  Widget _profileRow(IconData icon, String title, VoidCallback onTap) =>
+  Widget _profileRow(BuildContext context, IconData icon, String title, VoidCallback onTap) =>
       ListTile(
-        leading: Icon(icon, color: espresso, size: 21),
+        leading: Icon(icon, color: Theme.of(context).colorScheme.primary, size: 21),
         title: Text(
           title,
           style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
         ),
-        trailing: const Icon(
+        trailing: Icon(
           Icons.chevron_right_rounded,
           size: 20,
-          color: Colors.black45,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         visualDensity: const VisualDensity(vertical: -1),
         onTap: onTap,
       );
 
-  Widget _profileMenuCard(List<Widget> children) => Card(
+  Widget _profileMenuCard(BuildContext context, List<Widget> children) => Card(
     elevation: 0,
-    color: Colors.white,
+    color: Theme.of(context).cardColor,
     shape: RoundedRectangleBorder(
-      side: const BorderSide(color: Color(0xFFECE8E4)),
+      side: BorderSide(color: Theme.of(context).dividerColor),
       borderRadius: BorderRadius.circular(18),
     ),
     child: Column(children: children),
@@ -804,7 +898,6 @@ class _AccountScreenState extends State<_AccountScreen> {
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => page));
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text(
           'Profile',
@@ -838,27 +931,14 @@ class _AccountScreenState extends State<_AccountScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      if ('${u['phone'] ?? ''}'.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '${u['phone']}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.black54,
-                          ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Customer account',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
-                      ],
-                      if ('${u['email'] ?? ''}'.isNotEmpty) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          '${u['email']}',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.black54,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                      ),
                     ],
                   ),
                 ),
@@ -870,44 +950,50 @@ class _AccountScreenState extends State<_AccountScreen> {
               ],
             ),
           ),
-          _profileMenuCard([
+          _profileMenuCard(context, [
             _profileRow(
+              context,
               Icons.receipt_long_outlined,
               'My Orders',
               () => rootTab.value = 3,
             ),
             const Divider(height: 1, indent: 52),
             _profileRow(
+              context,
               Icons.location_on_outlined,
               'Addresses',
               () => open(const AddressesScreen()),
             ),
             const Divider(height: 1, indent: 52),
             _profileRow(
+              context,
               Icons.credit_card_outlined,
               'Payment Methods',
               _openPaymentInfo,
             ),
             const Divider(height: 1, indent: 52),
             _profileRow(
+              context,
               Icons.favorite_border_rounded,
               'Favorites',
               () => open(const FavoritesScreen()),
             ),
             const Divider(height: 1, indent: 52),
             _profileRow(
+              context,
               Icons.notifications_none_rounded,
               'Notifications',
               () => open(const NotificationsScreen()),
             ),
             const Divider(height: 1, indent: 52),
             _profileRow(
+              context,
               Icons.help_outline_rounded,
               'Help & Support',
               _openHelp,
             ),
             const Divider(height: 1, indent: 52),
-            _profileRow(Icons.info_outline_rounded, 'About', _openAbout),
+            _profileRow(context, Icons.info_outline_rounded, 'About', _openAbout),
           ]),
           const SizedBox(height: 22),
           SizedBox(

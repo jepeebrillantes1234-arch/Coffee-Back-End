@@ -61,6 +61,8 @@ Route::prefix('v1')->group(function () {
 
         // ===== RIDER =====
         Route::middleware('role:rider')->prefix('rider')->group(function () {
+            Route::get('profile',                    [RiderController::class, 'profile']);
+            Route::put('profile',                    [RiderController::class, 'updateProfile']);
             Route::get('deliveries',                 [RiderController::class, 'index']);
             Route::get('deliveries/{id}',            [RiderController::class, 'show']);
             Route::post('deliveries/{id}/accept',    [RiderController::class, 'accept']);

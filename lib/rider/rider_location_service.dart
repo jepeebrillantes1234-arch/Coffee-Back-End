@@ -14,6 +14,7 @@ class LocationService {
   Timer? _timer;
   Position? _last;
   int? _deliveryId;
+  bool _sending = false;
 
   final ValueNotifier<Position?> position = ValueNotifier<Position?>(null);
   final ValueNotifier<bool> tracking = ValueNotifier<bool>(false);
@@ -34,6 +35,8 @@ class LocationService {
     }
     return true;
   }
+
+  Future<bool> ensureReady() => _ensurePermission();
 
   LocationSettings _settings() {
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -61,10 +64,10 @@ class LocationService {
     return const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 5);
   }
 
-  Future<void> start({required int deliveryId}) async {
+  Future<bool> start({required int deliveryId}) async {
     _deliveryId = deliveryId;
-    if (_sub != null) return;
-    if (!await _ensurePermission()) return;
+    if (_sub != null) return true;
+    if (!await _ensurePermission()) return false;
 
     _sub = Geolocator.getPositionStream(locationSettings: _settings()).listen(
       (p) {
@@ -84,11 +87,13 @@ class LocationService {
 
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _send());
     await _send();
+    return true;
   }
 
   Future<void> _send() async {
     final p = _last;
-    if (p == null) return;
+    if (p == null || _sending) return;
+    _sending = true;
     try {
       final kmh = p.speed < 0 ? 0.0 : p.speed * 3.6;
       final id = _deliveryId;
@@ -97,7 +102,10 @@ class LocationService {
       error.value = null;
     } on ApiException catch (e) {
       error.value = e.message;
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _sending = false;
+    }
   }
 
   Future<void> stop() async {
@@ -107,6 +115,7 @@ class LocationService {
     _timer = null;
     _last = null;
     _deliveryId = null;
+    _sending = false;
     position.value = null;
     tracking.value = false;
   }

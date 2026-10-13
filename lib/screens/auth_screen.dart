@@ -22,9 +22,11 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
+  final _username = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
   final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
 
   bool _register = false;
   bool _hide = true;
@@ -44,9 +46,11 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   void dispose() {
     _name.dispose();
+    _username.dispose();
     _email.dispose();
     _phone.dispose();
     _password.dispose();
+    _confirmPassword.dispose();
     super.dispose();
   }
 
@@ -60,12 +64,14 @@ class _AuthScreenState extends State<AuthScreen> {
       if (_register) {
         await Api.I.register(
           _name.text.trim(),
+          _username.text.trim(),
           _email.text.trim(),
           _phone.text.trim(),
           _password.text,
+          _confirmPassword.text,
         );
       } else {
-        await Api.I.login(_email.text.trim(), _password.text);
+        await Api.I.login(_username.text.trim(), _password.text);
       }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', _remember);
@@ -183,12 +189,45 @@ class _AuthScreenState extends State<AuthScreen> {
         serverClientId: AppConfig.googleServerClientId,
       );
       await _googleSignInInitialization;
+      // Clear any cached Google account/token before starting a new flow.
+      // This also lets the user choose a different Google account and avoids
+      // sending an expired cached ID token to the backend.
+      await _googleSignIn.signOut();
       final account = await _googleSignIn.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null || idToken.isEmpty) {
         throw ApiException('Google did not return a valid sign-in token.');
       }
-      await Api.I.loginWithGoogle(idToken);
+      try {
+        await Api.I.loginWithGoogle(idToken);
+      } on ApiException catch (e) {
+        if (!e.message.toLowerCase().contains('google id token expired')) {
+          rethrow;
+        }
+
+        // Google can occasionally return a cached, expired credential. Revoke
+        // that credential once, then ask Google for a fresh sign-in result.
+        await _googleSignIn.disconnect();
+        final retryAccount = await _googleSignIn.authenticate();
+        final retryToken = retryAccount.authentication.idToken;
+        if (retryToken == null || retryToken.isEmpty) {
+          throw ApiException(
+            'Google did not return a fresh sign-in token. Please try again.',
+          );
+        }
+        try {
+          await Api.I.loginWithGoogle(retryToken);
+        } on ApiException catch (retryError) {
+          if (retryError.message.toLowerCase().contains(
+            'google id token expired',
+          )) {
+            throw ApiException(
+              'Google returned an expired sign-in token twice. Update Google Play services and the Google app, restart your phone, then try again.',
+            );
+          }
+          rethrow;
+        }
+      }
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', true);
       if (!mounted) return;
@@ -315,22 +354,36 @@ class _AuthScreenState extends State<AuthScreen> {
                       const SizedBox(height: 14),
                     ],
                     TextFormField(
-                      controller: _email,
-                      keyboardType: TextInputType.emailAddress,
+                      controller: _username,
                       textInputAction: TextInputAction.next,
-                      decoration: _dec(
-                        _register ? 'Email' : 'Email or Phone',
-                        Icons.mail_outline,
-                      ),
-                      validator: (v) => _required(
-                        v,
-                        _register
-                            ? 'Please enter your email.'
-                            : 'Please enter your email or phone.',
-                      ),
+                      autocorrect: false,
+                      decoration: _dec('Username', Icons.alternate_email),
+                      validator: (v) {
+                        final value = v?.trim() ?? '';
+                        if (value.isEmpty) {
+                          return 'Please enter your username.';
+                        }
+                        if (_register && value.length < 3) {
+                          return 'Username must be at least 3 characters.';
+                        }
+                        if (_register &&
+                            !RegExp(r'^[A-Za-z0-9_]+$').hasMatch(value)) {
+                          return 'Use only letters, numbers, and underscores.';
+                        }
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 14),
                     if (_register) ...[
+                      TextFormField(
+                        controller: _email,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: _dec('Email', Icons.mail_outline),
+                        validator: (v) =>
+                            _required(v, 'Please enter your email.'),
+                      ),
+                      const SizedBox(height: 14),
                       TextFormField(
                         controller: _phone,
                         keyboardType: TextInputType.phone,
@@ -370,6 +423,25 @@ class _AuthScreenState extends State<AuthScreen> {
                         return null;
                       },
                     ),
+                    if (_register) ...[
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _confirmPassword,
+                        obscureText: _hide,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) => _busy ? null : _submit(),
+                        decoration: _dec('Confirm password', Icons.lock_outline),
+                        validator: (v) {
+                          if (v == null || v.isEmpty) {
+                            return 'Please confirm your password.';
+                          }
+                          if (v != _password.text) {
+                            return 'Passwords do not match.';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
 
                     // ---------- REMEMBER ME / FORGOT ----------
                     if (!_register)

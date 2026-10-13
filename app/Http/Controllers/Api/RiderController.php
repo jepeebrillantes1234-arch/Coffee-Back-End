@@ -14,6 +14,28 @@ class RiderController extends Controller
 {
     use Responds;
 
+    public function profile(Request $r)
+    {
+        $user = $r->user()->load('riderProfile');
+        return $this->ok([
+            'user' => $user,
+            'rider_profile' => $user->riderProfile,
+        ]);
+    }
+
+    public function updateProfile(Request $r)
+    {
+        $data = $r->validate([
+            'vehicle_type' => 'nullable|string|max:50',
+            'plate_number' => 'nullable|string|max:20',
+            'license_no' => 'nullable|string|max:50',
+        ]);
+        $profile = $r->user()->riderProfile;
+        if (!$profile) return $this->fail('Rider profile is not configured for this account.', 403);
+        $profile->update($data);
+        return $this->ok($profile->fresh(), 'Vehicle information updated.');
+    }
+
     public function index(Request $r)
     {
         $jobs=Delivery::with(['order.user:id,name,phone','order.items.options'])->where('rider_id',$r->user()->id)->whereIn('status',['assigned','accepted','picked_up','on_the_way'])->latest('id')->get();

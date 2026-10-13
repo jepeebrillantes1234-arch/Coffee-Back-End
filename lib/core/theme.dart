@@ -1,22 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const espresso = Color(0xFF4B2E2B);
 const cream = Color(0xFFFFFFFF);
 const caramel = Color(0xFFC8843C);
 const success = Color(0xFF3C8D5A);
 
-ThemeData appTheme() => ThemeData(
+ThemeData appTheme([ThemeMode mode = ThemeMode.light]) => ThemeData(
   useMaterial3: true,
+  brightness: mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
   colorScheme: ColorScheme.fromSeed(
     seedColor: espresso,
     primary: espresso,
     secondary: caramel,
+    brightness: mode == ThemeMode.dark ? Brightness.dark : Brightness.light,
   ),
-  scaffoldBackgroundColor: cream,
-  appBarTheme: const AppBarTheme(
-    backgroundColor: Colors.white,
-    foregroundColor: espresso,
-    surfaceTintColor: Colors.white,
+  scaffoldBackgroundColor: mode == ThemeMode.dark
+      ? const Color(0xFF171311)
+      : cream,
+  cardTheme: CardThemeData(
+    color: mode == ThemeMode.dark ? const Color(0xFF241E1A) : Colors.white,
+    surfaceTintColor: Colors.transparent,
+  ),
+  appBarTheme: AppBarTheme(
+    backgroundColor: mode == ThemeMode.dark
+        ? const Color(0xFF211B17)
+        : Colors.white,
+    foregroundColor: mode == ThemeMode.dark ? Colors.white : espresso,
+    surfaceTintColor: Colors.transparent,
   ),
   filledButtonTheme: FilledButtonThemeData(
     style: FilledButton.styleFrom(
@@ -27,6 +38,31 @@ ThemeData appTheme() => ThemeData(
     ),
   ),
 );
+
+class AppThemeController extends ChangeNotifier {
+  AppThemeController._();
+
+  static final AppThemeController I = AppThemeController._();
+  static const _preferenceKey = 'app_theme_mode';
+  ThemeMode _mode = ThemeMode.light;
+  ThemeMode get mode => _mode;
+
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    _mode = prefs.getString(_preferenceKey) == 'dark'
+        ? ThemeMode.dark
+        : ThemeMode.light;
+    notifyListeners();
+  }
+
+  Future<void> setMode(ThemeMode mode) async {
+    if (_mode == mode) return;
+    _mode = mode;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_preferenceKey, mode == ThemeMode.dark ? 'dark' : 'light');
+  }
+}
 
 String statusLabel(String s, [String type = 'delivery']) {
   switch (s) {
