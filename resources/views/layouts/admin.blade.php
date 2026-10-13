@@ -1,140 +1,140 @@
 <!DOCTYPE html>
-<html lang="tl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Admin') | Coffee Shop</title>
+    <title>@yield('title', 'Admin') | KJM Coffee Shop</title>
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=poppins:400,500,600" rel="stylesheet">
+    <link href="https://fonts.bunny.net/css?family=dm-sans:400,500,600,700|playfair-display:600,700" rel="stylesheet">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <style>
+        :root{--coffee:#3b2118;--coffee-2:#542e20;--caramel:#b86a2c;--cream:#fbf7f1;--ink:#2c211d;--muted:#7d7773;--line:#eee8e2;--surface:#fff;--sidebar-width:270px}
+        *{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font-family:'DM Sans',sans-serif}
+        .admin-shell{min-height:100vh;display:flex}.admin-sidebar{width:var(--sidebar-width);height:100vh;position:sticky;top:0;flex:none;background:linear-gradient(165deg,#321b13,#48271b 70%,#2b1711);color:#fff;display:flex;flex-direction:column;transition:width .22s,transform .22s;z-index:40;overflow:hidden}
+        .brand{height:96px;padding:17px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #ffffff1c;white-space:nowrap}.brand-mark{width:48px;height:48px;border-radius:50%;background:#fff9ef;display:grid;place-items:center;overflow:hidden;flex:none}.brand-mark img{width:43px;height:43px;object-fit:contain}.brand-name{font-family:'Playfair Display',serif;font-size:18px;font-weight:700;line-height:1.15}.brand-tagline{font-size:10px;color:#d7c3b2;margin-top:4px}
+        .admin-nav{flex:1;overflow:auto;padding:10px 14px 18px}.nav-group{margin-top:10px}.nav-heading{padding:10px 8px 7px;color:#bda99b;font-size:10px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;white-space:nowrap}.nav-link{display:flex;align-items:center;gap:12px;min-height:41px;padding:7px 10px;margin:3px 0;border-radius:11px;color:#f7eee7;text-decoration:none;font-size:13px;font-weight:500;white-space:nowrap;transition:.16s}.nav-link:hover{background:#ffffff15}.nav-link.active{background:linear-gradient(90deg,#8f4b22,#a95d2c);box-shadow:0 5px 14px #1c100c55;color:#fff}.nav-icon{width:29px;height:29px;display:grid;place-items:center;flex:none;color:#f5e6d7}.nav-icon svg{width:19px;height:19px}.nav-label{overflow:hidden;text-overflow:ellipsis}.nav-active-dot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:#ffd18a}
+        .admin-content{min-width:0;flex:1}.topbar{height:68px;display:flex;align-items:center;gap:17px;padding:0 28px;background:#fffdfb;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}.icon-button{border:0;background:transparent;color:var(--coffee);height:38px;width:38px;border-radius:11px;display:grid;place-items:center;cursor:pointer}.icon-button:hover{background:#f4eee8}.icon-button svg{width:20px;height:20px}.search-wrap{height:38px;width:min(390px,42vw);display:flex;align-items:center;gap:10px;padding:0 13px;border-radius:13px;background:#f5f0eb;color:#8b827b}.search-wrap svg{width:17px;height:17px;flex:none}.search-wrap input{width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--ink)}.topbar-spacer{flex:1}.topbar-leaves{width:160px;height:48px;opacity:.5;position:relative;overflow:hidden}.topbar-leaves:before,.topbar-leaves:after{content:'';position:absolute;width:42px;height:21px;background:#b7784e;border-radius:100% 0 100% 0;transform:rotate(-32deg);box-shadow:35px 13px 0 #d4a785,68px -4px 0 #9e6242,99px 12px 0 #c58b65}.topbar-leaves:before{left:8px;top:11px}.topbar-leaves:after{left:37px;top:-3px;transform:rotate(145deg)}.admin-account{display:flex;align-items:center;gap:10px;min-width:150px}.account-avatar{width:36px;height:36px;border-radius:50%;background:#f2e3d5;color:var(--coffee);display:grid;place-items:center}.account-name{font-size:12px;font-weight:700}.account-role{font-size:10px;color:var(--muted);margin-top:2px}.account-chevron{margin-left:5px;color:#88776b}
+        .workspace{padding:22px 27px 32px;max-width:1800px;margin:auto}.workspace-heading{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px}.eyebrow{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#918983;font-weight:700}.breadcrumb{display:flex;gap:8px;align-items:center;margin-top:5px;color:#8e8177;font-size:12px}.breadcrumb strong{color:var(--coffee)}.system-status{display:inline-flex;gap:8px;align-items:center;padding:8px 13px;background:#e8f8e9;border:1px solid #c9edca;border-radius:99px;color:#24753c;font-size:11px;font-weight:700}.system-status i{width:7px;height:7px;background:#3ba956;border-radius:50%}
+        .flash{margin:0 0 14px;padding:12px 15px;border-radius:12px;font-size:13px}.flash-success{background:#eaf7ed;color:#237541;border:1px solid #cbe8d2}.flash-error{background:#fff0ee;color:#ae3328;border:1px solid #f3d0cb}
+        .admin-shell{min-height:100vh;display:flex}.admin-sidebar{width:270px;height:100vh;position:sticky;top:0;flex:none;background:linear-gradient(165deg,#321b13,#48271b 70%,#2b1711);color:#fff;display:flex;flex-direction:column;transition:width .22s,transform .22s;z-index:40;overflow:hidden}.admin-nav{flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;padding:10px 14px 18px;scrollbar-width:thin;scrollbar-color:#a97858 transparent}.admin-content{min-width:0;flex:1}.topbar .search-wrap{margin-left:4px}.topbar-logout{height:36px;padding:0 9px;border:0;border-radius:9px;background:transparent;color:#72584a;display:flex;align-items:center;gap:6px;font:inherit;font-size:11px;font-weight:600;cursor:pointer}.topbar-logout:hover{background:#f4eee8}.topbar-logout svg{width:17px;height:17px}
+        .admin-shell.is-collapsed .admin-sidebar{width:82px}.admin-shell.is-collapsed .brand{padding-left:17px}.admin-shell.is-collapsed .brand-copy,.admin-shell.is-collapsed .nav-heading,.admin-shell.is-collapsed .nav-label,.admin-shell.is-collapsed .nav-active-dot,.admin-shell.is-collapsed .profile-copy,.admin-shell.is-collapsed .logout-label{display:none}.admin-shell.is-collapsed .admin-nav{padding-left:13px;padding-right:13px}.admin-shell.is-collapsed .nav-link{justify-content:center;padding:6px}.admin-shell.is-collapsed .profile-mini{justify-content:center;padding-left:0;padding-right:0}.admin-shell.is-collapsed .logout-button{justify-content:center}.mobile-backdrop{display:none}
+        @media(max-width:850px){.admin-sidebar{position:fixed;left:0;top:0;transform:translateX(-100%);width:270px!important}.admin-shell.mobile-open .admin-sidebar{transform:translateX(0)}.mobile-backdrop{position:fixed;inset:0;background:#1e130e88;z-index:30}.admin-shell.mobile-open .mobile-backdrop{display:block}.admin-shell.is-collapsed .brand-copy,.admin-shell.is-collapsed .nav-heading,.admin-shell.is-collapsed .nav-label,.admin-shell.is-collapsed .nav-active-dot,.admin-shell.is-collapsed .profile-copy,.admin-shell.is-collapsed .logout-label{display:block}.admin-shell.is-collapsed .nav-link{justify-content:flex-start;padding:7px 10px}.admin-shell.is-collapsed .profile-mini{justify-content:flex-start}.workspace{padding:20px 16px 28px}.topbar{padding:0 14px;gap:8px}.topbar-leaves{display:none}.admin-account{min-width:unset}.account-copy,.account-chevron{display:none}}
+        @media(max-width:520px){.workspace{padding-left:12px;padding-right:12px}.topbar-logout .logout-text{display:none}.topbar-logout{padding:0 5px}}
+        .account-trigger{border:0;background:transparent;text-align:left;cursor:pointer;padding:5px 8px;border-radius:12px}.account-trigger:hover{background:#f5eee8}
+        .admin-profile-shade{position:fixed;inset:0;background:#21150f75;z-index:60;opacity:0;visibility:hidden;transition:.2s}.admin-profile-panel{position:fixed;inset:0 0 0 auto;width:min(390px,94vw);padding:22px;background:#fff;z-index:61;transform:translateX(105%);transition:transform .24s;overflow:auto;box-shadow:-14px 0 40px #21150f20}.admin-profile-open .admin-profile-shade{opacity:1;visibility:visible}.admin-profile-open .admin-profile-panel{transform:translateX(0)}
+        .admin-panel-head{display:flex;justify-content:space-between;align-items:center;font-weight:700}.admin-panel-close{border:0;background:#f3efeb;border-radius:10px;width:36px;height:36px;font-size:22px;cursor:pointer}.admin-panel-user{text-align:center;padding:23px 8px}.admin-panel-avatar{width:76px;height:76px;border-radius:50%;margin:0 auto 10px;background:#f0e1d4;color:#573429;display:grid;place-items:center;font-size:25px;font-weight:700}.admin-panel-card{margin:10px 0;padding:15px;border:1px solid #eee9e5;border-radius:15px;background:#fff}.admin-panel-label{font-size:11px;color:#77808b;margin:9px 0 4px}.admin-panel-value{font-size:13px;font-weight:600;overflow-wrap:anywhere}.admin-theme-row{display:flex;gap:8px}.admin-theme-row button{flex:1;padding:9px;border:1px solid #e8e3de;border-radius:10px;background:#fff;color:#342720;cursor:pointer}.admin-theme-row button.active{background:#542e20;border-color:#542e20;color:#fff}
+        body[data-admin-theme=dark]{--cream:#171412;--ink:#eee6df;--muted:#b9aaa0;--line:#40352f;--surface:#241e1a;--coffee:#f1e6dc;--coffee-2:#dfc2aa;--caramel:#e2a06a;color-scheme:dark}body[data-admin-theme=dark] .admin-content,body[data-admin-theme=dark] .workspace{background:#171412;color:#eee6df}body[data-admin-theme=dark] .topbar,body[data-admin-theme=dark] .admin-profile-panel,body[data-admin-theme=dark] .admin-panel-card,body[data-admin-theme=dark] .workspace [class~="bg-white"]{background:#241e1a!important;color:#eee6df}body[data-admin-theme=dark] .workspace [class~="bg-cream"]{background:#1d1916!important}body[data-admin-theme=dark] .workspace :is([class*="text-espresso"],[class*="text-gray-"],[class*="text-black"]),body[data-admin-theme=dark] .admin-profile-panel :is(.text-gray-700,.text-amber-900){color:#e8dfd7!important}body[data-admin-theme=dark] .admin-panel-label{color:#b7aaa0}body[data-admin-theme=dark] .admin-account,body[data-admin-theme=dark] .account-name,body[data-admin-theme=dark] .account-chevron{color:#eee6df}body[data-admin-theme=dark] .search-wrap{background:#332a25;color:#d6c9be}body[data-admin-theme=dark] .search-wrap input{color:#eee6df}body[data-admin-theme=dark] .workspace input:not([type=hidden]),body[data-admin-theme=dark] .workspace select,body[data-admin-theme=dark] .workspace textarea{background:#302823!important;color:#eee6df!important;border-color:#51443b!important}body[data-admin-theme=dark] .workspace table th,body[data-admin-theme=dark] .workspace table td,body[data-admin-theme=dark] .workspace hr{border-color:#463b35!important}body[data-admin-theme=dark] .workspace thead{background:#302721;color:#e8dfd7}body[data-admin-theme=dark] .workspace .breadcrumb strong,body[data-admin-theme=dark] .workspace .eyebrow{color:#d4c6ba}body[data-admin-theme=dark] .workspace [class*="text-caramel"]{color:#e1a876!important}body[data-admin-theme=dark] .account-trigger:hover{background:#382c25}body[data-admin-theme=dark] .admin-theme-row button{background:#302823;color:#eee6df;border-color:#51443b}body[data-admin-theme=dark] .admin-theme-row button.active{background:#8a4d2b;color:#fff}
+        body[data-admin-theme=dark] .workspace :is(h1,h2,h3,h4,label,legend,dt,dd,th,td,small,p:not([class*="text-"]),li:not([class*="text-"])){color:#e8dfd7}
+        body[data-admin-theme=dark] .workspace .dashboard :is(.dashboard-title,.stat-value,.panel-title,.sales-label,.top-product-name,.orders-table .total){color:#eee6df}
+        body[data-admin-theme=dark] .workspace .dashboard :is(.stat-label,.top-qty,.orders-table td){color:#c9bbb0}
+        body[data-admin-theme=dark] .workspace .dashboard :is(.stat-card,.panel,.recent-panel){background:#241e1a;border-color:#40352f}
+        body[data-admin-theme=dark] .workspace .dashboard :is(.sales-chart,.recent-heading,.orders-table td){border-color:#40352f}
+        body[data-admin-theme=dark] .workspace .dashboard .sales-chart{background:repeating-linear-gradient(to bottom,transparent 0,transparent 42px,#40352f 43px)}
+        body[data-admin-theme=dark] .workspace .dashboard .top-item{border-color:#40352f}
+        body[data-admin-theme=dark] .workspace .dashboard .orders-table thead{background:#302721;color:#e8dfd7}
+        body[data-admin-theme=dark] .workspace .dashboard .orders-table tbody tr:hover{background:#302721}
+        @yield('admin-styles')
+    </style>
 </head>
-<body class="bg-[#faf9f8] text-espresso font-sans">
+<body>
 @php
-    // Mga icon (stroke) para sa sidebar
     $icons = [
-        'grid'   => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
-        'box'    => '<path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/>',
+        'grid' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+        'box' => '<path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/>',
         'folder' => '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>',
-        'tag'    => '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+        'tag' => '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
         'dollar' => '<circle cx="12" cy="12" r="9"/><path d="M14.5 9a2.5 2.5 0 0 0-2.5-1.5c-1.4 0-2.5.8-2.5 2s1.1 1.7 2.5 2 2.5.8 2.5 2-1.1 2-2.5 2A2.5 2.5 0 0 1 9.5 15M12 6v1.5M12 16.5V18"/>',
-        'users'  => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
-        'badge'  => '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="10" r="2.5"/><path d="M7 18c.8-2 2.6-3 5-3s4.2 1 5 3"/>',
-        'bike'   => '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h3"/>',
-        'bag'    => '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>',
-        'truck'  => '<rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
-        'pin'    => '<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
-        'card'   => '<rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/>',
-        'star'   => '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
-        'chart'  => '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
-        'file'   => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
+        'users' => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+        'badge' => '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="12" cy="10" r="2.5"/><path d="M7 18c.8-2 2.6-3 5-3s4.2 1 5 3"/>',
+        'bike' => '<circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h3"/>',
+        'bag' => '<path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>',
+        'truck' => '<rect x="1" y="3" width="15" height="13"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+        'pin' => '<path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+        'card' => '<rect x="1" y="4" width="22" height="16" rx="2"/><path d="M1 10h22"/>',
+        'star' => '<path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/>',
+        'chart' => '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+        'file' => '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
         'logout' => '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
-        'cup'    => '<path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><path d="M6 1v3M10 1v3M14 1v3"/>',
+        'search' => '<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',
+        'menu' => '<path d="M4 6h16M4 12h16M4 18h16"/>',
+        'bell' => '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',
+        'chevron' => '<path d="m9 18 6-6-6-6"/>',
+        'home' => '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1z"/>',
     ];
-
-    // [label, url, active pattern, icon]
     $groups = [
-        'Overview' => [
-            ['Dashboard', route('admin.dashboard'), 'admin', 'grid'],
-        ],
-        'Catalog' => [
-            ['Products',        route('admin.products.index'),   'admin/products*',   'box'],
-            ['Categories',      route('admin.categories.index'), 'admin/categories*', 'folder'],
-            ['Promos',          route('admin.promos.index'),     'admin/promos*',     'tag'],
-            ['Discount & Fees', route('admin.settings.edit'),    'admin/settings*',   'dollar'],
-        ],
-        'People' => [
-            ['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'],
-            ['Staff',     route('admin.users.index', 'staff'),    'admin/users/staff*',    'badge'],
-            ['Riders',    route('admin.users.index', 'rider'),    'admin/users/rider*',    'bike'],
-        ],
-        'Operations' => [
-            ['Orders',        route('admin.orders.index'),          'admin/orders*',        'bag'],
-            ['Deliveries',    route('admin.deliveries.index'),      'admin/deliveries*',    'truck'],
-            ['GPS Monitor',   route('admin.gps.index'),             'admin/gps-monitor*',   'pin'],
-            ['Payments',      route('admin.payments.index'),        'admin/payments*',      'card'],
-            ['Reviews',       route('admin.reviews.index'),         'admin/reviews*',       'star'],
-            ['Reports',       route('admin.reports.show', 'sales'), 'admin/reports*',       'chart'],
-            ['Activity Logs', route('admin.activity.index'),        'admin/activity-logs*', 'file'],
-        ],
+        'Overview' => [['Dashboard', route('admin.dashboard'), 'admin', 'grid']],
+        'Catalog' => [['Products', route('admin.products.index'), 'admin/products*', 'box'], ['Categories', route('admin.categories.index'), 'admin/categories*', 'folder'], ['Promos', route('admin.promos.index'), 'admin/promos*', 'tag'], ['Discount & Fees', route('admin.settings.edit'), 'admin/settings*', 'dollar']],
+        'People' => [['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'], ['Staff', route('admin.users.index', 'staff'), 'admin/users/staff*', 'badge'], ['Riders', route('admin.users.index', 'rider'), 'admin/users/rider*', 'bike']],
+        'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file']],
     ];
-
-    $svg = fn (string $key, string $cls = 'w-[18px] h-[18px]') =>
-        '<svg class="' . $cls . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' . ($icons[$key] ?? '') . '</svg>';
-
+    $svg = fn (string $key, string $class = '') => '<svg class="' . $class . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($icons[$key] ?? '') . '</svg>';
     $user = auth()->user();
 @endphp
-
-<div class="flex min-h-screen">
-    {{-- ================= SIDEBAR ================= --}}
-    <aside class="w-72 shrink-0 bg-white border-r border-black/5 flex flex-col h-screen sticky top-0">
-        <div class="px-5 py-5 flex items-center gap-3 border-b border-black/5">
-            <div class="w-11 h-11 rounded-xl bg-espresso text-cream grid place-items-center">{!! $svg('cup', 'w-5 h-5') !!}</div>
-            <div class="leading-tight">
-                <p class="font-semibold text-sm">Coffee Shop</p>
-                <p class="text-[11px] text-gray-400">Admin Panel</p>
-            </div>
-        </div>
-
-        <nav class="flex-1 overflow-y-auto px-3 pb-4">
+<div class="admin-shell" id="adminShell">
+    <div class="mobile-backdrop" id="mobileBackdrop"></div>
+    <aside class="admin-sidebar" id="adminSidebar">
+        <a class="brand" href="{{ route('admin.dashboard') }}" aria-label="KJM Coffee Shop admin home">
+            <span class="brand-mark"><img src="{{ asset('logo1.png') }}" alt="KJM Coffee Shop logo"></span>
+            <span class="brand-copy"><span class="brand-name">KJM Coffee Shop</span><span class="brand-tagline"></span></span>
+        </a>
+        <nav class="admin-nav" aria-label="Admin navigation">
             @foreach ($groups as $label => $items)
-                <p class="px-3 pt-5 pb-2 text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400">{{ $label }}</p>
-                <div class="space-y-1">
+                <div class="nav-group">
+                    <p class="nav-heading">{{ $label }}</p>
                     @foreach ($items as [$text, $url, $pattern, $icon])
                         @php $active = request()->is($pattern); @endphp
-                        <a href="{{ $url }}"
-                           class="flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm transition
-                                  {{ $active ? 'bg-espresso text-white font-medium shadow-md' : 'text-gray-700 hover:bg-gray-100' }}">
-                            <span class="w-8 h-8 rounded-xl grid place-items-center shrink-0 {{ $active ? 'bg-white/15' : 'bg-gray-100 text-gray-500' }}">{!! $svg($icon) !!}</span>
-                            <span>{{ $text }}</span>
-                            @if ($active) <span class="ml-auto w-1.5 h-1.5 rounded-full bg-caramel"></span> @endif
+                        <a href="{{ $url }}" class="nav-link {{ $active ? 'active' : '' }}" title="{{ $text }}">
+                            <span class="nav-icon">{!! $svg($icon) !!}</span><span class="nav-label">{{ $text }}</span>
+                            @if ($active) <span class="nav-active-dot"></span> @endif
                         </a>
                     @endforeach
                 </div>
             @endforeach
         </nav>
-
-        <div class="p-3 border-t border-black/5 space-y-2">
-            <div class="flex items-center gap-3 px-3 py-2.5 rounded-2xl border border-black/5">
-                <div class="w-9 h-9 rounded-full bg-cream text-espresso grid place-items-center text-sm font-semibold">{{ strtoupper(substr($user->name, 0, 1)) }}</div>
-                <div class="leading-tight min-w-0">
-                    <p class="text-sm font-medium truncate">{{ $user->name }}</p>
-                    <p class="text-[11px] text-gray-400">Administrator</p>
-                </div>
-            </div>
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-                <button class="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-sm text-gray-600 hover:bg-gray-100">
-                    <span class="w-8 h-8 rounded-xl grid place-items-center bg-gray-100 text-gray-500">{!! $svg('logout') !!}</span> Logout
-                </button>
-            </form>
-        </div>
     </aside>
-
-    {{-- ================= NILALAMAN ================= --}}
-    <div class="flex-1 min-w-0 flex flex-col">
-        <header class="h-[68px] bg-white border-b border-black/5 flex items-center justify-between px-8">
-            <div class="leading-tight">
-                <p class="text-[10px] font-semibold tracking-[0.18em] uppercase text-gray-400">Admin Workspace</p>
-                <p class="text-sm font-semibold">@yield('title', 'Dashboard')</p>
-            </div>
-            <span class="flex items-center gap-2 text-xs font-medium text-success bg-success/10 border border-success/20 rounded-full px-3 py-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-success"></span> System Active
-            </span>
+    <div class="admin-content">
+        <header class="topbar">
+            <button type="button" class="icon-button" id="sidebarToggle" aria-label="Toggle navigation">{!! $svg('menu') !!}</button>
+            <label class="search-wrap">{!! $svg('search') !!}<input id="adminSearch" type="search" placeholder="Search navigation..." aria-label="Search navigation"></label>
+            <span class="topbar-spacer"></span><span class="topbar-leaves" aria-hidden="true"></span>
+            <span class="icon-button" aria-label="Notifications">{!! $svg('bell') !!}</span>
+            <button type="button" class="admin-account account-trigger" id="adminProfileOpen" aria-label="Open profile settings"><span class="account-avatar">{{ strtoupper(substr($user->name ?? 'A', 0, 1)) }}</span><span class="account-copy"><span class="account-name">{{ $user->name ?? 'Admin' }}</span><span class="account-role">Administrator</span></span><span class="account-chevron">⌄</span></button>
         </header>
-
-        <main class="p-8 min-w-0">
-            @if (session('success'))
-                <div class="mb-4 rounded-xl bg-success/10 border border-success/30 text-success px-4 py-3 text-sm">{{ session('success') }}</div>
-            @endif
-            @if (session('error'))
-                <div class="mb-4 rounded-xl bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{{ session('error') }}</div>
-            @endif
+        <main class="workspace">
+            <div class="workspace-heading"><div><div class="eyebrow">Admin Workspace</div><div class="breadcrumb">{!! $svg('home') !!}<span>?</span><strong>@yield('title', 'Dashboard')</strong></div></div><span class="system-status"><i></i>System Active</span></div>
+            @if (session('success')) <div class="flash flash-success">{{ session('success') }}</div> @endif
+            @if (session('error')) <div class="flash flash-error">{{ session('error') }}</div> @endif
             @yield('content')
         </main>
     </div>
 </div>
-
+<div class="admin-profile-shade" id="adminProfileShade"></div>
+<aside class="admin-profile-panel" id="adminProfilePanel" aria-label="Profile settings">
+    <div class="admin-panel-head"><span>⚙ &nbsp; Profile Settings</span><button class="admin-panel-close" id="adminProfileClose" type="button" aria-label="Close">×</button></div>
+    <div class="admin-panel-user"><div class="admin-panel-avatar">{{ strtoupper(substr($user->name ?? 'A', 0, 1)) }}</div><strong>{{ $user->name ?? 'Administrator' }}</strong><div class="admin-panel-label">Administrator · Active</div></div>
+    <section class="admin-panel-card"><div class="admin-panel-label">Full Name</div><div class="admin-panel-value">{{ $user->name ?? 'Administrator' }}</div><hr class="my-3"><div class="admin-panel-label">Email Address</div><div class="admin-panel-value">{{ $user->email ?? '' }}</div>@if($user?->phone)<hr class="my-3"><div class="admin-panel-label">Phone Number</div><div class="admin-panel-value">{{ $user->phone }}</div>@endif<div class="admin-panel-label">Role</div><div class="admin-panel-value">Administrator</div></section>
+    <section class="admin-panel-card"><strong class="text-sm">☾ &nbsp; Preferences</strong><div class="admin-panel-label">Theme</div><div class="admin-theme-row"><button type="button" data-admin-theme-choice="light">☼ &nbsp; Light</button><button type="button" data-admin-theme-choice="dark">☾ &nbsp; Dark</button></div></section>
+    <section class="admin-panel-card"><strong class="text-sm">◇ &nbsp; Security</strong><a class="block py-3 text-sm text-gray-700 no-underline hover:text-amber-800" href="{{ url('/forgot-password') }}">Change Password &nbsp; ›</a></section>
+    <form method="POST" action="{{ route('logout') }}" class="mt-4">@csrf<button type="submit" class="w-full rounded-xl bg-espresso px-4 py-3 text-sm font-semibold text-white">Log out</button></form>
+</aside>
+<script>
+(()=>{const shell=document.getElementById('adminShell'),toggle=document.getElementById('sidebarToggle'),backdrop=document.getElementById('mobileBackdrop'),search=document.getElementById('adminSearch');toggle?.addEventListener('click',()=>{if(innerWidth<=850){shell.classList.toggle('mobile-open')}else{shell.classList.toggle('is-collapsed');localStorage.setItem('adminSidebarCollapsed',shell.classList.contains('is-collapsed')?'1':'0')}});backdrop?.addEventListener('click',()=>shell.classList.remove('mobile-open'));if(innerWidth>850&&localStorage.getItem('adminSidebarCollapsed')==='1')shell.classList.add('is-collapsed');search?.addEventListener('input',()=>{const q=search.value.toLowerCase();document.querySelectorAll('.admin-nav .nav-link').forEach(link=>link.style.display=link.textContent.toLowerCase().includes(q)?'':'none');document.querySelectorAll('.nav-group').forEach(group=>group.style.display=[...group.querySelectorAll('.nav-link')].some(link=>link.style.display!=='none')?'':'none')})})();
+</script>
+<script>
+(()=>{
+  const body=document.body,panel=document.getElementById('adminProfilePanel');
+  const theme=value=>{body.dataset.adminTheme=value;localStorage.setItem('adminTheme',value);document.querySelectorAll('[data-admin-theme-choice]').forEach(button=>button.classList.toggle('active',button.dataset.adminThemeChoice===value))};
+  theme(localStorage.getItem('adminTheme')||'light');
+  document.querySelectorAll('[data-admin-theme-choice]').forEach(button=>button.addEventListener('click',()=>theme(button.dataset.adminThemeChoice)));
+  const open=()=>{body.classList.add('admin-profile-open');document.getElementById('adminProfileOpen').setAttribute('aria-expanded','true')};
+  const close=()=>{body.classList.remove('admin-profile-open');document.getElementById('adminProfileOpen').setAttribute('aria-expanded','false')};
+  document.getElementById('adminProfileOpen')?.addEventListener('click',open);
+  document.getElementById('adminProfileClose')?.addEventListener('click',close);
+  document.getElementById('adminProfileShade')?.addEventListener('click',close);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')close()});
+})();
+</script>
 @stack('scripts')
 </body>
 </html>

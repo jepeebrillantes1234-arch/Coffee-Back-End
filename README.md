@@ -1,17 +1,26 @@
-# coffee_customer
+# Staff Panel - Order Queue, Walk-in POS, Daily Transactions
 
-A new Flutter project.
+## 1. Kopyahin (PALITAN ang existing kung meron)
+  backend/app/Services/CheckoutService.php            -> PALITAN (may walk-in na)
+  backend/app/Services/OrderWorkflow.php              -> PALITAN (complete ng walk-in)
+  backend/app/Http/Controllers/Staff/*                -> app/Http/Controllers/Staff/  (bagong folder)
+  backend/routes/staff.php                            -> routes/staff.php  (bago)
+  backend/resources/views/layouts/staff.blade.php     -> resources/views/layouts/
+  backend/resources/views/staff/**                    -> resources/views/staff/   (bagong folder)
 
-## Getting Started
+## 2. Idagdag ang ISANG linya sa DULO ng routes/web.php
+  require __DIR__.'/staff.php';
 
-This project is a starting point for a Flutter application.
+## 3. I-run
+  composer dump-autoload
+  php artisan optimize:clear
 
-A few resources to get you started if this is your first Flutter project:
+## 4. Gumawa/gamitin ang staff account
+  Admin > Staff > + Magdagdag   (o ang demo: staff@coffee.test / password)
+  Login: http://127.0.0.1:8000/login  -> mapupunta sa /staff/orders
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 5. Subukan
+  - Walk-in POS: /staff/pos  -> pumili ng kape > Bayaran > lalabas ang "I-print ang resibo"
+    Pagkatapos ay lalabas ang order sa Order Queue (Inihahanda). I-click ang "Handa na" > "Naibigay na".
+  - Online order: umorder sa Customer App > tutunog ang Order Queue (i-click muna ang "I-enable ang tunog")
+  - Transactions: /staff/transactions

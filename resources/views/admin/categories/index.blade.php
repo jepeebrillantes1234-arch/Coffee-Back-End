@@ -3,13 +3,13 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold">Categories</h1>
-    <a href="{{ route('admin.categories.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">+ Bagong Category</a>
+    <a href="{{ route('admin.categories.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">+ New Category</a>
 </div>
 
 <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
-            <tr><th class="p-3">Larawan</th><th class="p-3">Pangalan</th><th class="p-3">Products</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Aksyon</th></tr>
+            <tr><th class="p-3">Image</th><th class="p-3">Name</th><th class="p-3">Products</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
         </thead>
         <tbody>
         @forelse ($categories as $c)
@@ -29,14 +29,14 @@
                 <td class="p-3 text-right space-x-3">
                     <a href="{{ route('admin.categories.edit', $c) }}" class="text-caramel font-medium">Edit</a>
                     <form method="POST" action="{{ route('admin.categories.destroy', $c) }}" class="inline"
-                          onsubmit="return confirm('Burahin ang category na ito?')">
+                          onsubmit="return confirm('Delete this category?')">
                         @csrf @method('DELETE')
-                        <button class="text-red-600">Burahin</button>
+                        <button class="text-red-600">Delete</button>
                     </form>
                 </td>
             </tr>
         @empty
-            <tr><td colspan="6" class="p-6 text-center text-espresso/50">Wala pang category.</td></tr>
+            <tr><td colspan="6" class="p-6 text-center text-espresso/50">No categories found.</td></tr>
         @endforelse
         </tbody>
     </table>

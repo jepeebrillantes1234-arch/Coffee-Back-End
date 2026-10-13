@@ -14,6 +14,8 @@ return [
     |
     */
 
+    'google' => ['client_id' => env('GOOGLE_WEB_CLIENT_ID')],
+
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
     ],

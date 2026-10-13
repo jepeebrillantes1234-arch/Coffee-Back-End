@@ -3,25 +3,25 @@
 @section('content')
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold">Products</h1>
-    <a href="{{ route('admin.products.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">+ Bagong Product</a>
+    <a href="{{ route('admin.products.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">+ New Product</a>
 </div>
 
 <form method="GET" class="flex gap-3 mb-4">
-    <input name="search" value="{{ request('search') }}" placeholder="Hanapin ang product..."
+    <input name="search" value="{{ request('search') }}" placeholder="Search product..."
            class="rounded-lg border border-espresso/20 px-3 py-2 text-sm w-64">
     <select name="category_id" class="rounded-lg border border-espresso/20 px-3 py-2 text-sm">
-        <option value="">Lahat ng category</option>
+        <option value="">All categories</option>
         @foreach ($categories as $c)
             <option value="{{ $c->id }}" @selected(request('category_id') == $c->id)>{{ $c->name }}</option>
         @endforeach
     </select>
-    <button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Hanapin</button>
+    <button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Search</button>
 </form>
 
 <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
-            <tr><th class="p-3">Larawan</th><th class="p-3">Pangalan</th><th class="p-3">Category</th><th class="p-3">Presyo</th><th class="p-3">Status</th><th class="p-3 text-right">Aksyon</th></tr>
+            <tr><th class="p-3">Image</th><th class="p-3">Name</th><th class="p-3">Category</th><th class="p-3">Price</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
         </thead>
         <tbody>
         @forelse ($products as $p)
@@ -42,14 +42,14 @@
                     <a href="{{ route('admin.products.options', $p) }}" class="text-espresso/70">Options</a>
                     <a href="{{ route('admin.products.edit', $p) }}" class="text-caramel font-medium">Edit</a>
                     <form method="POST" action="{{ route('admin.products.destroy', $p) }}" class="inline"
-                          onsubmit="return confirm('Burahin ang product na ito?')">
+                          onsubmit="return confirm('Delete this product?')">
                         @csrf @method('DELETE')
-                        <button class="text-red-600">Burahin</button>
+                        <button class="text-red-600">Delete</button>
                     </form>
                 </td>
             </tr>
         @empty
-            <tr><td colspan="6" class="p-6 text-center text-espresso/50">Walang product na nahanap.</td></tr>
+            <tr><td colspan="6" class="p-6 text-center text-espresso/50">No products found.</td></tr>
         @endforelse
         </tbody>
     </table>

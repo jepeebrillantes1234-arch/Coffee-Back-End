@@ -9,7 +9,7 @@ class User extends Authenticatable
 {
     use HasApiTokens, Notifiable;
 
-    protected $fillable = ['name','email','phone','password','role','avatar','status','fcm_token'];
+    protected $fillable = ['name','username','email','phone','password','role','avatar','status','fcm_token','google_id'];
     protected $hidden   = ['password','remember_token'];
     protected $casts    = ['password' => 'hashed'];
 

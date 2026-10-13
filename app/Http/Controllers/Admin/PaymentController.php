@@ -29,7 +29,7 @@ class PaymentController extends Controller
 
     public function markPaid(Order $order)
     {
-        if ($order->payment_method === 'gcash') return back()->with('error', 'Awtomatikong nate-track ang GCash. Hindi puwedeng i-mark nang mano-mano.');
+        if ($order->payment_method === 'qrph') return back()->with('error', 'Awtomatikong nate-track ang QRPh. Hindi puwedeng i-mark nang mano-mano.');
         if ($order->payment_status !== 'unpaid') return back()->with('error', 'Hindi ito unpaid.');
         $this->setStatus($order, 'paid');
         Activity::log('payment', 'payments', "Minarkahang paid ang {$order->order_number}");
@@ -39,7 +39,7 @@ class PaymentController extends Controller
     public function refund(Order $order)
     {
         if ($order->payment_status !== 'paid') return back()->with('error', 'Paid lang ang puwedeng i-refund.');
-        if ($order->payment_method === 'gcash') {
+        if ($order->payment_method === 'qrph') {
             try {
                 app(\App\Services\PaymentGateway::class)->refundOrder($order);
             } catch (\Throwable $e) {

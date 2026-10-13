@@ -10,14 +10,14 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
-/** PayMongo (GCash) - Hosted Checkout */
+/** PayMongo (QRPh) - Hosted Checkout */
 class PaymentGateway
 {
-    private function http()
+    private function http(string $version = 'v1')
     {
         $key = config('paymongo.secret');
         if (!$key) throw new \RuntimeException('Walang PAYMONGO_SECRET_KEY sa .env.');
-        return Http::withBasicAuth($key, '')->acceptJson()->asJson()->timeout(20)->baseUrl(config('paymongo.base_url'));
+        return Http::withBasicAuth($key, '')->acceptJson()->asJson()->timeout(20)->baseUrl(rtrim(config('paymongo.base_url'), '/') . '/' . $version);
     }
 
     private function fail($res, string $what): never
@@ -27,7 +27,7 @@ class PaymentGateway
         throw new \RuntimeException("PayMongo: {$detail}");
     }
 
-    /** Gumagawa ng GCash checkout page para sa order. */
+    /** Gumagawa ng QRPh checkout page para sa order. */
     public function createCheckout(Order $order): array
     {
         if (config('paymongo.mode') === 'simulated') {
@@ -37,23 +37,18 @@ class PaymentGateway
         $order->loadMissing('user');
         $base = rtrim((string) config('paymongo.public_url'), '/');
 
-        $res = $this->http()->post('/checkout_sessions', ['data' => ['attributes' => [
-            'billing' => array_filter([
-                'name'  => optional($order->user)->name,
-                'email' => optional($order->user)->email,
-            ]),
+        $res = $this->http('v2')->post('/checkout_sessions', ['data' => ['attributes' => [
+
             'line_items' => [[
                 'amount'   => (int) round($order->total * 100),   // centavos
                 'currency' => 'PHP',
                 'name'     => "Coffee Shop {$order->order_number}",
                 'quantity' => 1,
             ]],
-            'payment_method_types' => ['gcash'],
-            'description'          => "Order {$order->order_number}",
+            'payment_method_types' => ['qrph'],
             'reference_number'     => $order->order_number,
             'send_email_receipt'   => false,
-            'show_description'     => true,
-            'show_line_items'      => true,
+
             'success_url'          => $base . '/pay/return',
             'cancel_url'           => $base . '/pay/cancel',
             'metadata'             => ['order_id' => (string) $order->id],
@@ -65,7 +60,7 @@ class PaymentGateway
         $url = $res->json('data.attributes.checkout_url');
 
         Payment::updateOrCreate(['order_id' => $order->id], [
-            'method' => 'gcash', 'provider' => 'paymongo', 'provider_session_id' => $sessionId,
+            'method' => 'qrph', 'provider' => 'paymongo', 'provider_session_id' => $sessionId,
             'checkout_url' => $url, 'amount' => $order->total, 'status' => 'pending',
             'provider_payment_id' => null, 'paid_at' => null,
         ]);
@@ -80,7 +75,7 @@ class PaymentGateway
         if (!$p || !$p->provider_session_id) return false;
         if ($p->provider === 'simulated') return false;   // sa simulate page nagiging paid
 
-        $res = $this->http()->get('/checkout_sessions/' . $p->provider_session_id);
+        $res = $this->http('v1')->get('/checkout_sessions/' . $p->provider_session_id);
         if (!$res->successful()) {
             Log::warning('PayMongo retrieve failed', ['status' => $res->status(), 'body' => $res->json()]);
             return false;
@@ -111,7 +106,7 @@ class PaymentGateway
             }
 
             Payment::updateOrCreate(['order_id' => $o->id], [
-                'method' => 'gcash', 'provider' => 'paymongo', 'provider_payment_id' => $paymentId,
+                'method' => 'qrph', 'provider' => 'paymongo', 'provider_payment_id' => $paymentId,
                 'amount' => $o->total, 'status' => 'paid', 'paid_at' => now(),
             ]);
 
@@ -164,7 +159,7 @@ class PaymentGateway
         $p->update(['status' => 'refunded']);
         $order->update(['payment_status' => 'refunded']);
         Notifier::send($order->user_id, 'Na-refund ang bayad 💸',
-            'Ibabalik ang ₱' . number_format($p->amount, 2) . ' sa GCash mo para sa ' . $order->order_number . '.',
+            'Ibabalik ang ₱' . number_format($p->amount, 2) . ' sa QRPh mo para sa ' . $order->order_number . '.',
             'refund', ['order_id' => $order->id]);
     }
 
@@ -175,7 +170,7 @@ class PaymentGateway
         $url = rtrim((string) config('paymongo.public_url'), '/') . '/pay/simulate/' . $session;
 
         Payment::updateOrCreate(['order_id' => $order->id], [
-            'method' => 'gcash', 'provider' => 'simulated', 'provider_session_id' => $session,
+            'method' => 'qrph', 'provider' => 'simulated', 'provider_session_id' => $session,
             'checkout_url' => $url, 'amount' => $order->total, 'status' => 'pending',
             'provider_payment_id' => null, 'paid_at' => null,
         ]);

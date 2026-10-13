@@ -18,12 +18,13 @@ class HomeController extends Controller
         $isNewCustomer = ! Order::where('user_id', $request->user()->id)->exists();
 
         $settings = Settings::all();
+        $qrphEnabled = config('shop.payment', 'cod') === 'online'
+            && (config('paymongo.mode') === 'simulated' || filled(config('paymongo.secret')));
         $config = [
-            'payment_method' => config('shop.payment', 'cod'),
-            'payment_mode' => config('shop.payment', 'cod'),
-            'available_payment_methods' => config('shop.payment', 'cod') === 'online'
-                ? ['cod', 'gcash']
-                : ['cod'],
+            'payment_method' => $qrphEnabled ? 'online' : 'cod',
+            'payment_mode' => $qrphEnabled ? 'online' : 'cod',
+            'qrph_enabled' => $qrphEnabled,
+            'available_payment_methods' => $qrphEnabled ? ['cod', 'qrph'] : ['cod'],
             'first_order_enabled' => (bool) ((int) ($settings['first_order_enabled'] ?? 1)),
             'first_order_percent' => (float) ($settings['first_order_percent'] ?? 15),
             'first_order_max' => (float) ($settings['first_order_max'] ?? 100),
@@ -65,4 +66,5 @@ class HomeController extends Controller
         ]);
     }
 }
+
 

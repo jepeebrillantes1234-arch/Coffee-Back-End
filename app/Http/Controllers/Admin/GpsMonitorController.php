@@ -32,6 +32,7 @@ class GpsMonitorController extends Controller
                 return [
                     'id'        => $u->id,
                     'name'      => $u->name,
+                    'avatar_url'=> $u->avatar ? asset('storage/' . ltrim($u->avatar, '/')) : null,
                     'lat'       => (float) $u->riderProfile->current_lat,
                     'lng'       => (float) $u->riderProfile->current_lng,
                     'available' => (bool) $u->riderProfile->is_available,

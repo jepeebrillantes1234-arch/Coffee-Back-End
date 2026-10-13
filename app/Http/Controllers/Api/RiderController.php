@@ -35,7 +35,6 @@ class RiderController extends Controller
         $profile->update($data);
         return $this->ok($profile->fresh(), 'Vehicle information updated.');
     }
-
     public function index(Request $r)
     {
         $jobs=Delivery::with(['order.user:id,name,phone','order.items.options'])->where('rider_id',$r->user()->id)->whereIn('status',['assigned','accepted','picked_up','on_the_way'])->latest('id')->get();

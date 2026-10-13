@@ -3,9 +3,9 @@
 @section('content')
 <div class="flex items-center justify-between mb-4">
     <h1 class="text-2xl font-semibold">Menu · Availability</h1>
-    <input id="q" placeholder="Hanapin ang item..." class="rounded-lg border border-espresso/20 px-3 py-2 text-sm w-64 bg-white">
+    <input id="q" placeholder="Search item..." class="rounded-lg border border-espresso/20 px-3 py-2 text-sm w-64 bg-white">
 </div>
-<p class="text-sm text-espresso/60 mb-5">Kapag <b>Sold out</b> ang isang item, hindi na ito makikita sa Customer App at sa POS.</p>
+<p class="text-sm text-espresso/60 mb-5">When an item is marked as <b>Sold out</b>, it will no longer appear in the Customer App and POS.</p>
 
 @foreach ($categories as $c)
     @if ($c->products->isNotEmpty())

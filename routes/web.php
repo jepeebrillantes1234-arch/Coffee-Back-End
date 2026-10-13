@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\ReviewController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Auth\WebLoginController;
+use App\Http\Controllers\Auth\PasswordResetController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -28,6 +29,9 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [WebLoginController::class, 'login'])->middleware('throttle:10,1');
 });
 Route::post('/logout', [WebLoginController::class, 'logout'])->middleware('auth')->name('logout');
+Route::get('/reset-password/{token}', [PasswordResetController::class, 'show'])->name('password.reset');
+Route::post('/reset-password', [PasswordResetController::class, 'update'])->middleware('throttle:5,1')->name('password.reset.update');
+Route::get('/password-reset-done', [PasswordResetController::class, 'done'])->name('password.reset.done');
 
 // ================= ADMIN =================
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {

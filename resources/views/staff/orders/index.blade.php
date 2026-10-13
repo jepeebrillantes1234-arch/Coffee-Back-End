@@ -2,9 +2,9 @@
 @section('title', 'Orders')
 @section('content')
 <div class="flex items-center justify-between mb-4">
-    <h1 class="text-2xl font-semibold">Order Queue</h1>
+    <div><h1 class="text-2xl font-semibold">Orders</h1><p class="text-sm text-gray-500">Manage and track customer orders in real time.</p></div>
     <div class="flex items-center gap-3 text-sm">
-        <span class="text-espresso/60">Nag-a-update tuwing 8 segundo <span class="inline-block w-2 h-2 rounded-full bg-success ml-1"></span></span>
+        <span class="text-espresso/60">Live updates every 8 seconds <span class="inline-block w-2 h-2 rounded-full bg-success ml-1"></span></span>
         <button id="sound-btn" type="button" class="px-3 py-1.5 rounded-lg border border-espresso/20 bg-white">🔕 I-enable ang tunog</button>
     </div>
 </div>

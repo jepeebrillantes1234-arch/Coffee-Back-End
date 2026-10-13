@@ -17,6 +17,8 @@ Route::prefix('v1')->group(function () {
     // Public
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('auth/login',    [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('auth/google', [AuthController::class, 'googleLogin'])->middleware('throttle:10,1');
+    Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');
 
     Route::get('categories',    [MenuController::class, 'categories']);
     Route::get('products',      [MenuController::class, 'products']);
@@ -52,6 +54,7 @@ Route::prefix('v1')->group(function () {
             Route::post('orders',                      [OrderController::class, 'store'])->middleware('throttle:20,1');
             Route::get('orders',                       [OrderController::class, 'index']);
             Route::get('orders/{id}',                  [OrderController::class, 'show']);
+            Route::delete('orders/{id}',               [OrderController::class, 'destroy']);
             Route::post('orders/{id}/pay',             [OrderController::class, 'pay'])->middleware('throttle:20,1');
             Route::post('orders/{id}/payment/verify',  [OrderController::class, 'verify'])->middleware('throttle:60,1');
             Route::post('orders/{id}/cancel',          [OrderController::class, 'cancel']);
@@ -61,8 +64,8 @@ Route::prefix('v1')->group(function () {
 
         // ===== RIDER =====
         Route::middleware('role:rider')->prefix('rider')->group(function () {
-            Route::get('profile',                    [RiderController::class, 'profile']);
-            Route::put('profile',                    [RiderController::class, 'updateProfile']);
+            Route::get('profile', [RiderController::class, 'profile']);
+            Route::put('profile', [RiderController::class, 'updateProfile']);
             Route::get('deliveries',                 [RiderController::class, 'index']);
             Route::get('deliveries/{id}',            [RiderController::class, 'show']);
             Route::post('deliveries/{id}/accept',    [RiderController::class, 'accept']);

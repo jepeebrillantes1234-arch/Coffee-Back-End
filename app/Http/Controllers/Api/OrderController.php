@@ -36,14 +36,15 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $data=$this->validateCheckout($request,true);
-        $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'gcash':'cod'):(config('shop.payment','cod')==='online'?'gcash':'cash'));
-        if($method==='gcash' && config('shop.payment','cod')!=='online') return $this->fail('COD lang ang kasalukuyang paraan ng bayad.');
-        if($data['order_type']==='delivery' && $method==='cash') return $this->fail('COD o GCash lang ang puwedeng bayad para sa delivery.');
-        if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o GCash ang bayad para sa pickup.');
+        $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'qrph':'cod'):(config('shop.payment','cod')==='online'?'qrph':'cash'));
+        if($method==='qrph' && config('shop.payment','cod')!=='online') return $this->fail('Online payment is currently unavailable.');
+        if($method==='qrph' && config('paymongo.mode')!=='simulated' && !filled(config('paymongo.secret'))) return $this->fail('Online payment is not configured yet. Please choose Cash on Delivery or contact the shop.',503);
+        if($data['order_type']==='delivery' && $method==='cash') return $this->fail('COD o QRPh lang ang puwedeng bayad para sa delivery.');
+        if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
         $quote=$this->quote($request->user(),$data);
         $order=DB::transaction(function()use($request,$data,$method,$quote){
             $o=Order::create(['order_number'=>'KJM-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
-                'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='gcash'?'awaiting_payment':'pending',
+                'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
                 'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],'delivery_fee'=>$quote['delivery_fee'],'total'=>$quote['total'],
                 'is_first_order'=>$quote['is_first_order'],'payment_method'=>$method,'payment_status'=>'unpaid',
                 'delivery_address'=>$data['delivery_address']??null,'delivery_lat'=>$data['delivery_lat']??null,
@@ -59,35 +60,54 @@ class OrderController extends Controller
             return $o;
         });
         Notifier::order($order,$order->status);
-        $checkout=$method==='gcash'?app(PaymentGateway::class)->createCheckout($order):null;
-        return $this->ok(['order'=>$this->clientOrder($order->fresh()->load(['items.options','review','payments'])),'checkout'=>$checkout], 'Nagawa ang order',201);
+        $checkout = null;
+        if ($method === 'qrph') {
+            try {
+                $checkout = app(PaymentGateway::class)->createCheckout($order);
+            } catch (\Throwable $e) {
+                $order->update(['status' => 'cancelled', 'reject_reason' => 'Payment checkout could not be created.']);
+                $this->log($order, null);
+                report($e);
+                return $this->fail('Could not start QRPh checkout. No payment was confirmed; try again or choose Cash on Delivery.', 502);
+            }
+        }
+        return $this->ok(['order'=>$this->clientOrder($order->fresh()->load(['items.options','items.product','review','payments'])),'checkout'=>$checkout], 'Nagawa ang order',201);
     }
 
     public function index(Request $request)
     {
-        $orders=Order::with(['items.options','review','payments'])->where('user_id',$request->user()->id)->latest('id')->limit(100)->get();
+        $orders=Order::with(['items.options','items.product','review','payments'])->where('user_id',$request->user()->id)->latest('id')->limit(100)->get();
         return $this->ok($orders->map(fn($o)=>$this->clientOrder($o))->values());
     }
 
     public function show(Request $request,int $id)
     {
-        $o=Order::with(['items.options','review','payments'])->where('user_id',$request->user()->id)->findOrFail($id);
+        $o=Order::with(['items.options','items.product','review','payments'])->where('user_id',$request->user()->id)->findOrFail($id);
         return $this->ok($this->clientOrder($o));
     }
 
+    public function destroy(Request $request,int $id)
+    {
+        $order=Order::where('user_id',$request->user()->id)->findOrFail($id);
+        if(!in_array($order->status,['completed','delivered','cancelled','rejected'],true)) {
+            return $this->fail('Only completed or cancelled orders can be deleted.',409);
+        }
+        $order->delete();
+        return $this->ok(['deleted'=>true],'Order deleted');
+    }
     public function pay(Request $request,int $id)
     {
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
-        if($o->payment_method!=='gcash') return $this->fail('COD ang bayad sa order na ito.');
+        if($o->payment_method!=='qrph') return $this->fail('COD ang bayad sa order na ito.');
         $checkout=app(PaymentGateway::class)->createCheckout($o);
-        return $this->ok(array_merge($this->clientOrder($o->fresh()->load(['items.options','review','payments'])), ['checkout_url'=>$checkout['url']]));
+        return $this->ok(array_merge($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])), ['checkout_url'=>$checkout['url']]));
     }
 
     public function verify(Request $request,int $id)
     {
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
         app(PaymentGateway::class)->sync($o);
-        return $this->ok($this->clientOrder($o->fresh()->load(['items.options','review','payments'])));
+        return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
     }
 
     public function cancel(Request $request,int $id)
@@ -96,7 +116,7 @@ class OrderController extends Controller
         if(!$o->canCancel()) return $this->fail('Hindi na maaaring kanselahin ang order.',409);
         $o->update(['status'=>'cancelled','reject_reason'=>'Kinansela ng customer']);
         $this->log($o,$request->user()->id);Notifier::order($o,'cancelled');
-        return $this->ok($this->clientOrder($o->fresh()->load(['items.options','review','payments'])));
+        return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
     }
 
     public function tracking(Request $request,int $id)
@@ -123,7 +143,7 @@ class OrderController extends Controller
         return $r->validate(['items'=>'required|array|min:1|max:50','items.*.product_id'=>'required|integer|exists:products,id',
             'items.*.quantity'=>'required|integer|min:1|max:50','items.*.option_ids'=>'nullable|array','items.*.option_ids.*'=>'integer',
             'items.*.notes'=>'nullable|string|max:255','order_type'=>($forOrder?'required':'nullable').'|in:delivery,pickup',
-            'payment_method'=>'nullable|in:cod,cash,gcash','promo_code'=>'nullable|string|max:30',
+            'payment_method'=>'nullable|in:cod,cash,qrph','promo_code'=>'nullable|string|max:30',
             'delivery_address'=>'required_if:order_type,delivery|nullable|string|max:1000',
             'delivery_lat'=>'nullable|numeric|between:-90,90','delivery_lng'=>'nullable|numeric|between:-180,180','notes'=>'nullable|string|max:1000']);
     }
@@ -177,7 +197,7 @@ class OrderController extends Controller
 
     private function clientOrder(Order $o):array
     {
-        $o->loadMissing(['items.options','review','payments']);
+        $o->loadMissing(['items.options','items.product','review','payments']);
         $payment=$o->payments->sortByDesc('id')->first();
         return ['id'=>$o->id,'order_number'=>$o->order_number,'order_type'=>$o->order_type,'status'=>$o->status,
             'subtotal'=>(float)$o->subtotal,'discount'=>(float)$o->discount,'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,
@@ -185,9 +205,9 @@ class OrderController extends Controller
             'delivery_lat'=>$o->delivery_lat,'delivery_lng'=>$o->delivery_lng,'notes'=>$o->notes,'reject_reason'=>$o->reject_reason,
             'created_at'=>$o->created_at?->toIso8601String(),'checkout_url'=>$payment?->checkout_url,
             'payment_expires_at'=>$o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
-            'can_pay'=>$o->payment_method==='gcash' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment',
+            'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment',
             'can_cancel'=>$o->canCancel(),'has_review'=>$o->review!==null,
-            'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
+'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'image_url'=>$i->product?->image_url,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
     }
 
     private function log(Order $o,?int $uid):void { DB::table('order_status_logs')->insert(['order_id'=>$o->id,'status'=>$o->status,'changed_by'=>$uid,'created_at'=>now()]); }
