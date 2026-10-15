@@ -27,6 +27,8 @@
   .staff-search{height:40px;width:min(430px,42vw);display:flex;align-items:center;gap:10px;padding:0 14px;border-radius:13px;background:#f4f0ec;color:#8a817a}
   .staff-search input{width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:12px}
   .staff-head-spacer{flex:1}.staff-profile-trigger{border:0;background:transparent;display:flex;align-items:center;gap:10px;padding:5px 8px;cursor:pointer;color:#282e39}
+  .staff-live-indicator{display:flex;align-items:center;gap:7px;border:1px solid #e8e1da;border-radius:999px;padding:6px 10px;color:#75685e;font-size:11px;white-space:nowrap}.staff-live-indicator i{width:8px;height:8px;border-radius:50%;background:#d49a36}.staff-live-indicator[data-connected="true"] i{background:#24a05a}body.staff-shell[data-staff-theme=dark] .staff-live-indicator{border-color:#51443b;color:#d5c9bd}
+  .staff-sound-toggle{border:1px solid #e8e1da;border-radius:999px;background:#fffdfb;color:#573429;padding:6px 10px;font-size:11px;white-space:nowrap;cursor:pointer}body.staff-shell[data-staff-theme=dark] .staff-sound-toggle{background:#241e1a;border-color:#51443b;color:#eee6df}
   .staff-head-avatar{width:38px;height:38px;border-radius:50%;background:#f0e1d4;color:#573429;display:grid;place-items:center;font-weight:700}
   body.staff-shell>main{margin-left:252px;min-height:calc(100vh - 72px);padding:26px;background:var(--staff-cream)}
   .staff-profile-shade{position:fixed;inset:0;background:#21150f75;z-index:60;opacity:0;visibility:hidden;transition:.2s}.staff-profile-panel{position:fixed;inset:0 0 0 auto;width:min(380px,94vw);padding:22px;background:white;z-index:61;transform:translateX(105%);transition:transform .24s;overflow:auto;box-shadow:-14px 0 40px #21150f20}
@@ -69,6 +71,8 @@
         <button type="button" id="staffMenuButton" class="staff-menu-button" aria-label="Open navigation">☰</button>
         <label class="staff-search"><span>⌕</span><input id="staffSearch" type="search" placeholder="Search order number, customer name..."></label>
         <span class="staff-head-spacer"></span>
+        <div id="staff-live-indicator" class="staff-live-indicator" data-connected="false" role="status" aria-live="polite"><i></i><span>Connecting</span></div>
+        <button type="button" id="staff-sound-toggle" class="staff-sound-toggle" aria-pressed="false">Sound off</button>
         <button type="button" id="staffProfileButton" class="staff-profile-trigger"><span class="staff-head-avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span><span class="staff-head-copy"><strong>{{ auth()->user()->name }}</strong><small class="block text-xs text-gray-500">{{ ucfirst(auth()->user()->role) }}</small></span><span>⌄</span></button>
         <span class="font-semibold text-lg">☕ Staff Panel</span>
         <nav class="flex gap-1">
@@ -115,6 +119,73 @@
 <script>
 (() => {
   const body = document.body;
+  const liveIndicator = document.getElementById('staff-live-indicator');
+  const soundToggle = document.getElementById('staff-sound-toggle');
+  const orderCountUrl = @json(route('staff.orders.count'));
+  let soundEnabled = localStorage.getItem('staff_sound') === '1';
+  let audioContext = null;
+  let countRefreshing = false;
+  const paintSoundToggle = () => {
+    soundToggle.textContent = soundEnabled ? 'Sound on' : 'Sound off';
+    soundToggle.setAttribute('aria-pressed', soundEnabled ? 'true' : 'false');
+  };
+  const playOrderSound = async () => {
+    if (!soundEnabled) return;
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      audioContext = audioContext || new AudioContextClass();
+      if (audioContext.state === 'suspended') await audioContext.resume();
+      [880, 1175, 880].forEach((frequency, index) => {
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        const startAt = audioContext.currentTime + index * 0.2;
+        oscillator.frequency.value = frequency;
+        gain.gain.value = 0.16;
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(startAt);
+        oscillator.stop(startAt + 0.14);
+      });
+    } catch (_) {}
+  };
+  paintSoundToggle();
+  soundToggle.addEventListener('click', async () => {
+    soundEnabled = !soundEnabled;
+    localStorage.setItem('staff_sound', soundEnabled ? '1' : '0');
+    paintSoundToggle();
+    if (soundEnabled) await playOrderSound();
+  });
+  const updateConnection = connected => {
+    liveIndicator.dataset.connected = connected ? 'true' : 'false';
+    liveIndicator.querySelector('span').textContent = connected ? 'Live' : 'Reconnecting';
+  };
+  const refreshOrderCount = async () => {
+    if (countRefreshing) return;
+    countRefreshing = true;
+    try {
+      const response = await fetch(orderCountUrl, { cache: 'no-store', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+      if (!response.ok) return;
+      const { count } = await response.json();
+      const currentCount = Number(count) || 0;
+      const previousValue = localStorage.getItem('staff_pending_count_seen');
+      if (previousValue !== null && currentCount > Number(previousValue)) playOrderSound();
+      localStorage.setItem('staff_pending_count_seen', String(currentCount));
+      document.querySelectorAll('#nav-pending').forEach(badge => {
+        badge.textContent = String(currentCount);
+        badge.classList.toggle('hidden', currentCount < 1);
+      });
+    } catch (_) {}
+    finally { countRefreshing = false; }
+  };
+  window.addEventListener('live-connection', event => updateConnection(event.detail?.connected === true));
+  window.addEventListener('live-update', event => {
+    if (event.detail?.kind === 'order') refreshOrderCount();
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshOrderCount(); });
+  refreshOrderCount();
+  window.setInterval(() => { if (!document.hidden) refreshOrderCount(); }, 5000);
+
   const panel = document.getElementById('staffProfilePanel');
   const setTheme = value => {
     body.dataset.staffTheme = value;

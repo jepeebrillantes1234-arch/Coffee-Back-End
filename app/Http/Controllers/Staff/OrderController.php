@@ -12,6 +12,7 @@ class OrderController extends Controller
 {
     public function index() { $orders=$this->orders(); $pendingCount=Order::whereIn('status',['awaiting_payment','pending'])->count(); return view('staff.orders.index',compact('orders','pendingCount')); }
     public function partial() { $orders=$this->orders(); return response()->view('staff.orders._queue',compact('orders'))->header('X-Pending',Order::whereIn('status',['awaiting_payment','pending'])->count())->header('Cache-Control','no-store, no-cache, must-revalidate'); }
+    public function count() { return response()->json(['count'=>Order::whereIn('status',['awaiting_payment','pending'])->count()])->header('Cache-Control','no-store, no-cache, must-revalidate'); }
     public function advance(Order $order, Request $request, OrderWorkflow $workflow)
     {
         try {

@@ -16,9 +16,6 @@
         <button id="notifications-btn" type="button" class="rounded-lg border border-espresso/20 bg-white px-3 py-1.5 text-sm">
             Enable notifications
         </button>
-        <button id="sound-btn" type="button" class="rounded-lg border border-espresso/20 bg-white px-3 py-1.5 text-sm">
-            Enable sound
-        </button>
     </div>
 </div>
 
@@ -37,15 +34,12 @@
     const liveLabel = document.getElementById('orders-live-label');
     const liveDot = document.getElementById('orders-live-dot');
     const toast = document.getElementById('orders-toast');
-    const soundButton = document.getElementById('sound-btn');
     const notificationsButton = document.getElementById('notifications-btn');
 
     let pendingCount = {{ (int) $pendingCount }};
     let liveConnected = false;
     let isRefreshing = false;
     let echoChannel = null;
-    let audioContext = null;
-    let soundEnabled = localStorage.getItem('staff_sound') === '1';
     let toastTimer;
 
     function updateLiveStatus(connected) {
@@ -62,23 +56,6 @@
         toastTimer = window.setTimeout(() => toast.classList.add('hidden'), 7000);
     }
 
-    function playNotificationSound() {
-        if (!soundEnabled) return;
-        try {
-            audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
-            [880, 1175, 880].forEach((frequency, index) => {
-                const oscillator = audioContext.createOscillator();
-                const gain = audioContext.createGain();
-                oscillator.frequency.value = frequency;
-                gain.gain.value = 0.18;
-                oscillator.connect(gain);
-                gain.connect(audioContext.destination);
-                oscillator.start(audioContext.currentTime + index * 0.22);
-                oscillator.stop(audioContext.currentTime + index * 0.22 + 0.16);
-            });
-        } catch (_) {}
-    }
-
     function setPendingCount(count) {
         const badge = document.getElementById('nav-pending');
         if (badge) {
@@ -91,7 +68,6 @@
     function notifyNewOrders(count) {
         const message = `${count} new customer order${count === 1 ? '' : 's'} received.`;
         showToast(message);
-        playNotificationSound();
         if ('Notification' in window && Notification.permission === 'granted') {
             new Notification('New customer order', {
                 body: count === 1 ? 'A new order is waiting in the staff order queue.' : `${count} orders are waiting in the staff order queue.`,
@@ -147,14 +123,6 @@
             updateLiveStatus(false);
         }
     }
-
-    soundButton.addEventListener('click', () => {
-        soundEnabled = !soundEnabled;
-        localStorage.setItem('staff_sound', soundEnabled ? '1' : '0');
-        soundButton.textContent = soundEnabled ? 'Sound on' : 'Enable sound';
-        if (soundEnabled) playNotificationSound();
-    });
-    soundButton.textContent = soundEnabled ? 'Sound on' : 'Enable sound';
 
     notificationsButton.addEventListener('click', async () => {
         if (!('Notification' in window)) {

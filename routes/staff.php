@@ -10,6 +10,7 @@ Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')-
     Route::get('/',fn()=>redirect()->route('staff.orders'))->name('home');
     Route::get('/orders',[OrderController::class,'index'])->name('orders');
     Route::get('/orders/partial',[OrderController::class,'partial'])->name('orders.partial');
+    Route::get('/orders/count',[OrderController::class,'count'])->name('orders.count');
     Route::post('/orders/{order}/advance',[OrderController::class,'advance'])->name('orders.advance');
     Route::post('/orders/{order}/assign-available',[OrderController::class,'assignAvailable'])->name('orders.assign-available');
     Route::post('/deliveries/{delivery}/remit',[OrderController::class,'remit'])->name('deliveries.remit');
