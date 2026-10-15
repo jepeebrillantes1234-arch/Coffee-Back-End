@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
-    public function index() { $orders=$this->orders(); $pendingCount=Order::where('status','pending')->count(); return view('staff.orders.index',compact('orders','pendingCount')); }
-    public function partial() { $orders=$this->orders(); return response()->view('staff.orders._list',compact('orders'))->header('X-Pending',Order::where('status','pending')->count()); }
+    public function index() { $orders=$this->orders(); $pendingCount=Order::whereIn('status',['awaiting_payment','pending'])->count(); return view('staff.orders.index',compact('orders','pendingCount')); }
+    public function partial() { $orders=$this->orders(); return response()->view('staff.orders._queue',compact('orders'))->header('X-Pending',Order::whereIn('status',['awaiting_payment','pending'])->count())->header('Cache-Control','no-store, no-cache, must-revalidate'); }
     public function advance(Order $order, Request $request, OrderWorkflow $workflow)
     {
         try {
@@ -62,5 +62,5 @@ class OrderController extends Controller
         });
         return back()->with('success','Naitala ang cash handover at nakumpleto ang order.');
     }
-    private function orders() { return Order::with(['user:id,name','items','delivery.rider:id,name'])->whereIn('status',['pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered'])->latest('id')->limit(100)->get(); }
+    private function orders() { return Order::with(['user:id,name','items','delivery.rider:id,name'])->whereIn('status',['awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered'])->latest('id')->limit(100)->get(); }
 }

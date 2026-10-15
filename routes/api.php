@@ -30,6 +30,7 @@ Route::prefix('v1')->group(function () {
 
     // Naka-login
     Route::middleware('auth:sanctum')->group(function () {
+        Route::post('/broadcasting/auth', \Illuminate\Broadcasting\BroadcastController::class.'@authenticate');
         Route::post('auth/logout',       [AuthController::class, 'logout']);
         Route::get('profile',            [AuthController::class, 'profile']);
         Route::put('profile',            [AuthController::class, 'updateProfile']);

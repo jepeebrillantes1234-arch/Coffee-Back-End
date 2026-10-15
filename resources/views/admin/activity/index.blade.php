@@ -10,7 +10,7 @@
     </select>
     <button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Filter</button>
 </form>
-<div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
+<div id="admin-activity-live"><div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
             <tr><th class="p-3">When</th><th class="p-3">Who</th><th class="p-3">Module</th><th class="p-3">Action</th><th class="p-3">Details</th><th class="p-3">IP</th></tr>
@@ -31,5 +31,8 @@
         </tbody>
     </table>
 </div>
-<div class="mt-4">{{ $logs->links() }}</div>
+<div class="mt-4">{{ $logs->links() }}</div></div>
+@push('scripts')
+<script>window.addEventListener('live-update', async e => { if (!(e.detail?.kind === 'activity')) return; try { const r=await fetch(location.href,{headers:{'X-Requested-With':'XMLHttpRequest'}}); if(!r.ok)return; const d=new DOMParser().parseFromString(await r.text(),'text/html'); {const n=d.getElementById('admin-activity-live'),c=document.getElementById('admin-activity-live');if(n&&c)c.innerHTML=n.innerHTML;} } catch(_){} });</script>
+@endpush
 @endsection

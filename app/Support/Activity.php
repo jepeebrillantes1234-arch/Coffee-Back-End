@@ -2,12 +2,13 @@
 namespace App\Support;
 
 use Illuminate\Support\Facades\DB;
+use App\Events\LiveUpdate;
 
 class Activity
 {
     public static function log(string $action, string $module, string $description = ''): void
     {
-        DB::table('activity_logs')->insert([
+        $id = DB::table('activity_logs')->insertGetId([
             'user_id'     => auth()->id(),
             'action'      => $action,
             'module'      => $module,
@@ -15,5 +16,6 @@ class Activity
             'ip_address'  => request()->ip(),
             'created_at'  => now(),
         ]);
+        LiveUpdate::dispatch('activity', $id);
     }
 }

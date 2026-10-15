@@ -24,13 +24,13 @@
         .hero-description{font-size:14px;line-height:1.6;color:rgba(255,255,255,.85);margin:0}
 
         /* Right Form Side */
-        .form-side{width:100%;max-width:520px;display:flex;align-items:center;justify-content:center;padding:40px;background:#fffaf5;box-shadow:-10px 0 30px rgba(0,0,0,.03)}
-        .login-card{width:100%;max-width:390px}
+        .form-side{width:41%;max-width:620px;min-height:100vh;position:relative;display:flex;align-items:center;justify-content:center;padding:34px;background:#fbf0e2 url('{{ asset('background1.png') }}') center/cover no-repeat;box-shadow:-10px 0 30px rgba(0,0,0,.08)}
+        .login-card{position:relative;z-index:1;width:100%;max-width:470px;padding:34px 32px;border:1px solid rgba(255,255,255,.72);border-radius:22px;background:rgba(255,250,242,.78);box-shadow:0 18px 50px rgba(70,39,20,.12);backdrop-filter:blur(5px)}
 
         /* Form elements */
         .brand{text-align:center;margin-bottom:28px}
-        .brand-logo{width:76px;height:76px;border-radius:50%;display:grid;place-items:center;margin:0 auto 10px;background:#fff;border:1px solid #ead9c6;box-shadow:0 5px 18px rgba(69,39,21,.08);overflow:hidden}
-        .brand-logo img{width:68px;height:68px;object-fit:contain}
+        .brand-logo{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;margin:0 auto 10px;background:#fff;border:1px solid #ead9c6;box-shadow:0 5px 18px rgba(69,39,21,.08);overflow:hidden}
+        .brand-logo img{width:82px;height:82px;object-fit:contain}
         .brand-name{font:700 25px/1.12 'Playfair Display',serif;letter-spacing:.02em;color:#3d2115}
         .form-subtitle{text-align:center;color:#806a5a;font-size:13px;margin-top:6px}
         
@@ -47,23 +47,20 @@
         .field-error{font-size:11px;color:#b42318;margin:5px 2px 0}
         .form-error{padding:10px 12px;margin:0 0 16px;border-radius:10px;background:#fff0ee;border:1px solid #f2cbc5;color:#a72b22;font-size:12px;line-height:1.45}
         
-        .remember-row{display:flex;align-items:center;margin:16px 0 20px}
+        .remember-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 20px}
         .remember-label{display:flex;align-items:center;gap:8px;font-size:12px;color:#725e50;cursor:pointer}
         .remember-label input{width:15px;height:15px;accent-color:#60351f}
-        
+        .forgot-link{font-size:12px;font-weight:600;color:#70452c;text-decoration:none;white-space:nowrap}
+        .forgot-link:hover{color:#402315;text-decoration:underline}
         .login-button{height:48px;width:100%;border:0;border-radius:12px;background:linear-gradient(100deg,#4a2617,#643519);color:#fffaf5;font:600 13px 'DM Sans',sans-serif;box-shadow:0 6px 14px rgba(62,32,17,.2);display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:transform .15s,box-shadow .15s,background .15s}
         .login-button:hover{background:linear-gradient(100deg,#5b301c,#77421f);transform:translateY(-1px);box-shadow:0 9px 18px rgba(62,32,17,.23)}
         .login-button svg{width:16px;height:16px}
-        
-        .back-home{display:flex;justify-content:center;align-items:center;gap:5px;margin-top:18px;color:#806a5a;text-decoration:none;font-size:12px}
-        .back-home:hover{color:#4a2617;text-decoration:underline}
-        .back-home svg{width:13px;height:13px}
 
         /* Responsive Breakpoint */
         @media(max-width:900px){
             .hero-side{display:none}
-            .form-side{max-width:100%;padding:24px;background:transparent}
-            body{background:#3a2319 url('{{ asset('background.png') }}') center/cover fixed no-repeat}
+            .form-side{width:100%;max-width:100%;min-height:100vh;padding:24px;background:transparent}
+            body{background:#fbf0e2 url('{{ asset('background1.png') }}') center/cover fixed no-repeat}
             body:before{content:'';position:fixed;inset:0;background:rgba(35,20,12,.2);pointer-events:none}
             .login-card{background:rgba(255,250,242,.96);padding:28px;border-radius:24px;box-shadow:0 24px 70px rgba(25,12,6,.35);backdrop-filter:blur(8px)}
         }
@@ -113,18 +110,18 @@
                                 <svg id="eyeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
                             </button>
                         </div>
-                        @error('password')<p class="field-error">{{ $message} }</p>@enderror
+                        @error('password')<p class="field-error">{{ $message }}</p>@enderror
                     </div>
 
                     <div class="remember-row">
                         <label class="remember-label"><input type="checkbox" name="remember" value="1" @checked(old('remember'))><span>Remember me</span></label>
+                        <a class="forgot-link" href="{{ route('password.request') }}">Forgot password?</a>
                     </div>
 
                     <button type="submit" class="login-button">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"/></svg>
                         <span>Sign In</span>
                     </button>
-                    <a class="back-home" href="{{ url('/') }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Back to Home</a>
                 </form>
             </main>
         </div>

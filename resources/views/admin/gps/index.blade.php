@@ -23,7 +23,7 @@
     </header>
     <div class="gps-layout">
         <section class="gps-panel gps-map-panel" aria-label="Live rider map">
-            <div class="gps-map-toolbar"><h2 class="gps-map-heading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Live Rider Map</h2><span class="gps-map-hint">Locations refresh automatically every 5 seconds</span></div>
+            <div class="gps-map-toolbar"><h2 class="gps-map-heading"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>Live Rider Map</h2><span class="gps-map-hint">Live rider location updates</span></div>
             <div class="gps-map-wrap"><div id="map" class="gps-map"></div>
                 <div class="gps-legend"><span class="gps-legend-item"><i class="gps-legend-dot gps-dot-online"></i>Online</span><span class="gps-legend-item"><i class="gps-legend-dot gps-dot-offline"></i>Offline</span><span class="gps-legend-item"><i class="gps-legend-dot gps-dot-delivery"></i>On delivery</span></div>
                 <span class="gps-map-credit">OpenStreetMap</span>
@@ -41,7 +41,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const SHOP = @json($shop);
-const DATA_URL = @json(route('admin.gps.data'));
+const DATA_URL = @json(route('admin.gps.data', [], false));
 let map = null, markers = {}, shopMarker = null, fitted = false, lastUpdateTime = Date.now();
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const statusLabel = status => ({accepted:'Accepted',picked_up:'Picked up',on_the_way:'On the way'}[status] || String(status || '').replaceAll('_',' '));
@@ -94,6 +94,6 @@ async function refreshRiders(){
     catch(error){console.error(error);state.textContent='Connection issue';document.getElementById('last-update').textContent='Could not refresh rider locations';}
 }
 setInterval(()=>{if(Date.now()-lastUpdateTime<1500)return;const seconds=Math.floor((Date.now()-lastUpdateTime)/1000);document.getElementById('last-update').textContent=`Last update: ${seconds} seconds ago`;},1000);
-initMap();refreshRiders();setInterval(refreshRiders,5000);
+initMap();refreshRiders();window.addEventListener('live-update', event => { if (['delivery','rider'].includes(event.detail?.kind)) refreshRiders(); });
 </script>
 @endpush

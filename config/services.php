@@ -15,6 +15,10 @@ return [
     */
 
     'google' => ['client_id' => env('GOOGLE_WEB_CLIENT_ID')],
+    'firebase' => [
+        'project_id' => env('FIREBASE_PROJECT_ID', 'kjm-coffee-shop'),
+        'credentials' => env('FIREBASE_CREDENTIALS'),
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),

@@ -27,6 +27,10 @@ Route::get('/', function () {
 Route::middleware('guest')->group(function () {
     Route::get('/login',  [WebLoginController::class, 'show'])->name('login');
     Route::post('/login', [WebLoginController::class, 'login'])->middleware('throttle:10,1');
+    Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
+    Route::post('/forgot-password/send-code', [PasswordResetController::class, 'sendCode'])->middleware('throttle:5,1')->name('password.request.code');
+    Route::post('/forgot-password/verify-code', [PasswordResetController::class, 'verifyCode'])->middleware('throttle:5,1')->name('password.request.verify');
+    Route::post('/forgot-password/change-email', [PasswordResetController::class, 'changeEmail'])->name('password.request.change-email');
 });
 Route::post('/logout', [WebLoginController::class, 'logout'])->middleware('auth')->name('logout');
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'show'])->name('password.reset');
@@ -96,4 +100,5 @@ if (is_file(__DIR__ . '/staff.php')) {
     require __DIR__ . '/staff.php';
 }
 require __DIR__ . '/promos_extra.php';
+
 

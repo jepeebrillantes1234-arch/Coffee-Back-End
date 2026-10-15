@@ -18,7 +18,7 @@
     </select>
     <button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Filter</button>
 </form>
-<div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
+<div id="admin-orders-live"><div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
             <tr><th class="p-3">Order #</th><th class="p-3">Customer</th><th class="p-3">Type</th><th class="p-3">Status</th><th class="p-3">Payment</th><th class="p-3 text-right">Total</th><th class="p-3">Date</th></tr>
@@ -40,5 +40,8 @@
         </tbody>
     </table>
 </div>
-<div class="mt-4">{{ $orders->links() }}</div>
+<div class="mt-4">{{ $orders->links() }}</div></div>
+@push('scripts')
+<script>window.addEventListener('live-update', async e => { if (!(['order','delivery','payment'].includes(e.detail?.kind))) return; try { const r=await fetch(location.href,{headers:{'X-Requested-With':'XMLHttpRequest'}}); if(!r.ok)return; const d=new DOMParser().parseFromString(await r.text(),'text/html'); {const n=d.getElementById('admin-orders-live'),c=document.getElementById('admin-orders-live');if(n&&c)c.innerHTML=n.innerHTML;} } catch(_){} });</script>
+@endpush
 @endsection

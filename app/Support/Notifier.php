@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Order;
+use App\Events\LiveUpdate;
 use Illuminate\Support\Facades\DB;
 
 class Notifier
@@ -10,7 +11,8 @@ class Notifier
     public static function send(?int $userId,string $title,string $message,?string $type=null,array $data=[]):void
     {
         if(!$userId) return;
-        DB::table('app_notifications')->insert(['user_id'=>$userId,'title'=>$title,'message'=>$message,'type'=>$type,'data'=>json_encode($data),'is_read'=>false,'created_at'=>now(),'updated_at'=>now()]);
+        $id = DB::table('app_notifications')->insertGetId(['user_id'=>$userId,'title'=>$title,'message'=>$message,'type'=>$type,'data'=>json_encode($data),'is_read'=>false,'created_at'=>now(),'updated_at'=>now()]);
+        LiveUpdate::dispatch('notification', $id, $userId);
     }
     public static function order(Order $order,string $status):void
     {

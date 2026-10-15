@@ -31,9 +31,10 @@ class DashboardController extends Controller
 
         $topProducts = DB::table('order_items as oi')
             ->join('orders as o', 'o.id', '=', 'oi.order_id')
+            ->leftJoin('products as p', 'p.id', '=', 'oi.product_id')
             ->whereIn('o.status', $done)
             ->whereDate('o.created_at', '>=', now()->subDays(30)->toDateString())
-            ->selectRaw('oi.product_name, SUM(oi.quantity) as qty')
+            ->selectRaw('oi.product_name, MAX(p.image) as product_image, SUM(oi.quantity) as qty')
             ->groupBy('oi.product_name')->orderByDesc('qty')->limit(5)->get();
 
         $recent = Order::with('user:id,name')->latest()->limit(8)->get();

@@ -102,7 +102,7 @@
             <button type="button" class="admin-account account-trigger" id="adminProfileOpen" aria-label="Open profile settings"><span class="account-avatar">{{ strtoupper(substr($user->name ?? 'A', 0, 1)) }}</span><span class="account-copy"><span class="account-name">{{ $user->name ?? 'Admin' }}</span><span class="account-role">Administrator</span></span><span class="account-chevron">⌄</span></button>
         </header>
         <main class="workspace">
-            <div class="workspace-heading"><div><div class="eyebrow">Admin Workspace</div><div class="breadcrumb">{!! $svg('home') !!}<span>?</span><strong>@yield('title', 'Dashboard')</strong></div></div><span class="system-status"><i></i>System Active</span></div>
+            <div class="workspace-heading"><div><div class="eyebrow">Admin Workspace</div><div class="breadcrumb">{!! $svg('home') !!}<strong>@yield('title', 'Dashboard')</strong></div></div><span class="system-status"><i></i>System Active</span></div>
             @if (session('success')) <div class="flash flash-success">{{ session('success') }}</div> @endif
             @if (session('error')) <div class="flash flash-error">{{ session('error') }}</div> @endif
             @yield('content')

@@ -101,7 +101,7 @@ class RiderController extends Controller
         $data=$r->validate(['delivery_id'=>'required|integer','latitude'=>'required|numeric|between:-90,90','longitude'=>'required|numeric|between:-180,180','speed'=>'nullable|numeric|min:0']);
         $d=Delivery::where('id',$data['delivery_id'])->where('rider_id',$r->user()->id)->whereIn('status',['accepted','picked_up','on_the_way'])->firstOrFail();
         DB::table('rider_locations')->insert(['delivery_id'=>$d->id,'rider_id'=>$r->user()->id,'latitude'=>$data['latitude'],'longitude'=>$data['longitude'],'speed'=>$data['speed']??null,'recorded_at'=>now()]);
-        $r->user()->riderProfile()->update(['current_lat'=>$data['latitude'],'current_lng'=>$data['longitude'],'last_location_at'=>now()]);return $this->ok(null,'Naitala ang lokasyon.');
+        $r->user()->riderProfile()->update(['current_lat'=>$data['latitude'],'current_lng'=>$data['longitude'],'last_location_at'=>now()]);\App\Events\LiveUpdate::dispatch('rider',(int)$r->user()->id);return $this->ok(null,'Naitala ang lokasyon.');
     }
     private function move(Request $r,int $id,string $from,string $to,?string $timestamp=null):Delivery
     {

@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Kreait\Firebase\Factory;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
@@ -70,76 +71,69 @@ class AuthController extends Controller
         return $this->ok(['user' => $this->userPayload($user), 'token' => $token], 'Logged in');
     }
 
-    // POST /api/v1/auth/google: verify Google's ID token on the server.
+    // POST /api/v1/auth/google: verify a Firebase Authentication ID token.
     public function googleLogin(Request $request)
     {
         $request->validate(['id_token' => 'required|string|max:8192']);
-        $clientId = config('services.google.client_id');
-        if (!$clientId) return $this->fail('Google sign-in is not configured on the server.', 503);
+
+        $credentialsPath = config('services.firebase.credentials');
+        if (!$credentialsPath || !is_file($credentialsPath)) {
+            return $this->fail('Firebase Admin credentials are not configured on the server.', 503);
+        }
 
         try {
-            $response = Http::asForm()
-                ->connectTimeout(8)
-                ->timeout(15)
-                ->retry(3, 500, function ($exception): bool {
-                    return $exception instanceof \Illuminate\Http\Client\ConnectionException
-                        || ($exception instanceof \Illuminate\Http\Client\RequestException
-                            && $exception->response?->serverError());
-                })
-                ->post('https://oauth2.googleapis.com/tokeninfo', [
-                    'id_token' => $request->input('id_token'),
-                ]);
-        } catch (\Throwable $e) {
-            // Log the network/TLS failure without ever recording the submitted ID token.
-            Log::warning('Google token verification request failed', [
-                'exception_class' => $e::class,
-                'exception_message' => mb_substr($e->getMessage(), 0, 300),
-            ]);
-            return $this->fail('Google sign-in could not reach Google. Please try again.', 503);
-        }
-        if (!$response->successful()) return $this->fail('Google sign-in token is invalid or expired.', 401);
+            $auth = (new Factory())
+                ->withProjectId(config('services.firebase.project_id'))
+                ->withServiceAccount($credentialsPath)
+                ->createAuth();
+            $firebaseIdToken = $request->input('id_token');
+            $verifiedToken = $auth->verifyIdToken($firebaseIdToken, true);
+            $claims = $verifiedToken->claims();
+            $firebaseUid = (string) $claims->get('sub');
+            $email = strtolower((string) $claims->get('email'));
+            $emailVerified = $claims->get('email_verified', false) === true;
+            $name = trim((string) $claims->get('name', ''));
 
-        $claims = $response->json();
-        $audClaim = $claims['aud'] ?? null;
-        $audiences = is_array($audClaim) ? $audClaim : [$audClaim];
-        $tokenExp = isset($claims['exp']) && is_numeric($claims['exp']) ? (int) $claims['exp'] : null;
-        $checks = [
-            'audience_matches' => in_array($clientId, $audiences, true),
-            'issuer_valid' => in_array($claims['iss'] ?? '', ['accounts.google.com', 'https://accounts.google.com'], true),
-            'has_subject' => is_string($claims['sub'] ?? null) && $claims['sub'] !== '',
-            'has_valid_email' => filter_var($claims['email'] ?? null, FILTER_VALIDATE_EMAIL) !== false,
-            'email_verified' => filter_var($claims['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN),
-            'token_not_expired' => $tokenExp !== null && $tokenExp > time(),
-        ];
-        if (in_array(false, $checks, true)) {
-            // Diagnostic metadata only. Never log the ID token or user's email.
-            Log::warning('Google ID token rejected', $checks + [
-                'token_audience' => $audClaim,
-                'expected_audience' => $clientId,
-                'token_issuer' => $claims['iss'] ?? null,
-                'token_exp' => $tokenExp,
-                'server_time' => time(),
+            if ($firebaseUid === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !$emailVerified) {
+                return $this->fail('The Firebase account must have a verified email address.', 401);
+            }
+        } catch (\Throwable $e) {
+            // Never log the token, email, or the SDK exception message. The
+            // decoded JWT fields below are diagnostic only and never trusted.
+            $diagnostics = $this->firebaseTokenDiagnostics($firebaseIdToken ?? $request->input('id_token'));
+            Log::warning('Firebase ID token verification failed', $diagnostics + [
+                'expected_project_id' => config('services.firebase.project_id'),
+                'exception_class' => $e::class,
+                'expired_error' => str_contains(strtolower($e->getMessage()), 'expired'),
             ]);
-            if ($tokenExp !== null && $tokenExp <= time()) {
-                return $this->fail('Google ID token expired. Please retry Google sign-in.', 401);
+
+            if (!$diagnostics['audience_matches_project'] || !$diagnostics['issuer_matches_project']) {
+                return $this->fail(
+                    'The app sent a token for a different Firebase project or sign-in provider. Rebuild and reinstall the latest app, then try again.',
+                    401,
+                );
             }
 
-            return $this->fail('Google account could not be verified for this app.', 401);
+            if (($diagnostics['expires_in_seconds'] ?? 0) <= 0 || str_contains(strtolower($e->getMessage()), 'expired')) {
+                return $this->fail(
+                    'Firebase returned an expired ID token. Force stop the app, reopen it, and sign in again. If it repeats, update/reinstall the latest app build.',
+                    401,
+                );
+            }
+
+            return $this->fail('Firebase sign-in could not be verified. Please sign in again.', 401);
         }
 
-        $email = strtolower($claims['email']);
-        $googleId = $claims['sub'];
-        $user = User::where('google_id', $googleId)->first();
-
+        $user = User::where('firebase_uid', $firebaseUid)->first();
         if (!$user) {
             $user = User::where('email', $email)->first();
-            if ($user && $user->google_id && $user->google_id !== $googleId) {
-                return $this->fail('This email is linked to another Google account.', 409);
+            if ($user && $user->firebase_uid && $user->firebase_uid !== $firebaseUid) {
+                return $this->fail('This email is already linked to a different Firebase account.', 409);
             }
 
             if (!$user) {
                 $user = User::create([
-                    'name' => mb_substr($claims['name'] ?? strstr($email, '@', true), 0, 100),
+                    'name' => mb_substr($name !== '' ? $name : strstr($email, '@', true), 0, 100),
                     'email' => $email,
                     'username' => $this->uniqueUsername($email),
                     'password' => Hash::make(Str::random(64)),
@@ -150,7 +144,7 @@ class AuthController extends Controller
             }
 
             $user->forceFill([
-                'google_id' => $googleId,
+                'firebase_uid' => $firebaseUid,
                 'email_verified_at' => $user->email_verified_at ?: now(),
             ])->save();
         }
@@ -163,8 +157,8 @@ class AuthController extends Controller
             return $this->fail('The rider account has not been approved yet.', 403);
         }
 
-        $token = $user->createToken($request->input('device_name', 'kjm-google-app'))->plainTextToken;
-        return $this->ok(['user' => $this->userPayload($user), 'token' => $token], 'Logged in with Google');
+        $token = $user->createToken($request->input('device_name', 'kjm-firebase-app'))->plainTextToken;
+        return $this->ok(['user' => $this->userPayload($user), 'token' => $token], 'Logged in with Firebase');
     }
     // POST /api/v1/auth/forgot-password
     public function forgotPassword(Request $request)
@@ -229,6 +223,35 @@ class AuthController extends Controller
 
         return $this->ok($this->userPayload($user), 'Profile updated');
     }
+    /**
+     * Read only non-sensitive JWT metadata for diagnostics. These claims are
+     * deliberately not trusted for authentication; verifyIdToken() remains the gate.
+     */
+    private function firebaseTokenDiagnostics(?string $token): array
+    {
+        $parts = is_string($token) ? explode('.', $token) : [];
+        $payload = count($parts) === 3
+            ? base64_decode(strtr($parts[1], '-_', '+/'), true)
+            : false;
+        $claims = is_string($payload) ? json_decode($payload, true) : null;
+        $claims = is_array($claims) ? $claims : [];
+        $projectId = (string) config('services.firebase.project_id');
+        $audience = $claims['aud'] ?? null;
+        $issuer = $claims['iss'] ?? null;
+        $expiresAt = isset($claims['exp']) && is_numeric($claims['exp']) ? (int) $claims['exp'] : null;
+        $issuedAt = isset($claims['iat']) && is_numeric($claims['iat']) ? (int) $claims['iat'] : null;
+
+        return [
+            'token_format_valid' => count($parts) === 3 && $claims !== [],
+            'issuer_matches_project' => $issuer === 'https://securetoken.google.com/' . $projectId,
+            'audience_matches_project' => $audience === $projectId,
+            'issued_at' => $issuedAt,
+            'expires_at' => $expiresAt,
+            'server_time' => time(),
+            'expires_in_seconds' => $expiresAt === null ? null : $expiresAt - time(),
+        ];
+    }
+
     private function uniqueUsername(string $email): string
     {
         $base = strtolower((string) strstr($email, '@', true));

@@ -2,7 +2,7 @@
 @section('title', 'Payments')
 @section('content')
 <h1 class="text-2xl font-semibold mb-6">Payments</h1>
-<div class="grid sm:grid-cols-3 gap-4 mb-6">
+<div id="admin-payments-live"><div class="grid sm:grid-cols-3 gap-4 mb-6">
     @foreach ([['Paid today', $summary['paid_today']], ['Unpaid', $summary['unpaid']], ['Refunded', $summary['refunded']]] as [$l, $v])
         <div class="bg-white rounded-2xl p-5 shadow-sm"><p class="text-xs text-espresso/60">{{ $l }}</p><p class="text-xl font-semibold mt-1">₱{{ number_format($v, 2) }}</p></div>
     @endforeach
@@ -45,5 +45,8 @@
         </tbody>
     </table>
 </div>
-<div class="mt-4">{{ $orders->links() }}</div>
+<div class="mt-4">{{ $orders->links() }}</div></div>
+@push('scripts')
+<script>window.addEventListener('live-update', async e => { if (!(['order','delivery','payment'].includes(e.detail?.kind))) return; try { const r=await fetch(location.href,{headers:{'X-Requested-With':'XMLHttpRequest'}}); if(!r.ok)return; const d=new DOMParser().parseFromString(await r.text(),'text/html'); {const n=d.getElementById('admin-payments-live'),c=document.getElementById('admin-payments-live');if(n&&c)c.innerHTML=n.innerHTML;} } catch(_){} });</script>
+@endpush
 @endsection
