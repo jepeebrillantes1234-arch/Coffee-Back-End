@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Staff\OrderController;
+use App\Http\Controllers\Staff\ProfileController;
 use App\Http\Controllers\Staff\PosController;
 use App\Http\Controllers\Staff\ProductController;
 use App\Http\Controllers\Staff\TransactionController;
@@ -9,8 +10,10 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
     Route::get('/',fn()=>redirect()->route('staff.orders'))->name('home');
     Route::get('/orders',[OrderController::class,'index'])->name('orders');
+    Route::post('/profile/avatar',[ProfileController::class,'updateAvatar'])->name('profile.avatar');
     Route::get('/orders/partial',[OrderController::class,'partial'])->name('orders.partial');
     Route::get('/orders/count',[OrderController::class,'count'])->name('orders.count');
+    Route::get('/orders/alerts',[OrderController::class,'alerts'])->name('orders.alerts');
     Route::post('/orders/{order}/advance',[OrderController::class,'advance'])->name('orders.advance');
     Route::post('/orders/{order}/assign-available',[OrderController::class,'assignAvailable'])->name('orders.assign-available');
     Route::post('/deliveries/{delivery}/remit',[OrderController::class,'remit'])->name('deliveries.remit');

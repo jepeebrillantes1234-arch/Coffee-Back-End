@@ -24,6 +24,11 @@ class SettingsController extends Controller
             'delivery_fee_per_km' => 'required|numeric|min:0',
             'delivery_radius_km'  => 'required|numeric|min:1',
             'auto_cancel_minutes' => 'required|integer|min:1|max:120',
+            'support_name' => 'nullable|string|max:120',
+            'support_phone' => 'nullable|string|max:30',
+            'support_email' => 'nullable|email|max:255',
+            'support_whatsapp' => 'nullable|string|max:40',
+            'support_hours' => 'nullable|string|max:160',
         ]);
         $data['first_order_enabled']  = $request->boolean('first_order_enabled') ? '1' : '0';
         $data['allow_promo_stacking'] = $request->boolean('allow_promo_stacking') ? '1' : '0';
@@ -34,3 +39,4 @@ class SettingsController extends Controller
         return back()->with('success', 'Na-save ang settings.');
     }
 }
+

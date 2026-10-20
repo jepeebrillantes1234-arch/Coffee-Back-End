@@ -7,6 +7,8 @@ use App\Http\Controllers\Admin\DeliveryController;
 use App\Http\Controllers\Admin\GpsMonitorController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PaymentController;
+use App\Http\Controllers\Admin\ProfileController;
+use App\Http\Controllers\Admin\SupportChatController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductOptionController;
 use App\Http\Controllers\Admin\PromoController;
@@ -41,6 +43,20 @@ Route::get('/password-reset-done', [PasswordResetController::class, 'done'])->na
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::get('support', [SupportChatController::class, 'index'])->name('support.index');
+    Route::get('support/poll', [SupportChatController::class, 'pollInbox'])->name('support.poll');
+    Route::get('support/notifications', [SupportChatController::class, 'notifications'])->name('support.notifications');
+    Route::get('support/{conversation}', [SupportChatController::class, 'show'])->name('support.show');
+    Route::get('support/{conversation}/poll', [SupportChatController::class, 'pollConversation'])->name('support.conversation-poll');
+    Route::post('support/{conversation}/reply', [SupportChatController::class, 'reply'])->name('support.reply');
+    Route::post('support/{conversation}/link-order', [SupportChatController::class, 'linkOrder'])->name('support.link-order');
+    Route::post('support/{conversation}/refund', [SupportChatController::class, 'refund'])->name('support.refund');
+    Route::post('support/{conversation}/close', [SupportChatController::class, 'close'])->name('support.close');
+    Route::delete('support/{conversation}', [SupportChatController::class, 'destroy'])->name('support.destroy');
+    Route::get('support/{conversation}/attachments/{message}', [SupportChatController::class, 'attachment'])->name('support.attachment');
+
 
     // Menu
     Route::resource('categories', CategoryController::class)->except('show');
@@ -100,5 +116,6 @@ if (is_file(__DIR__ . '/staff.php')) {
     require __DIR__ . '/staff.php';
 }
 require __DIR__ . '/promos_extra.php';
+
 
 

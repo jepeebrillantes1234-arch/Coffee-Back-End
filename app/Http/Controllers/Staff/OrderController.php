@@ -13,6 +13,27 @@ class OrderController extends Controller
     public function index() { $orders=$this->orders(); $pendingCount=Order::whereIn('status',['awaiting_payment','pending'])->count(); return view('staff.orders.index',compact('orders','pendingCount')); }
     public function partial() { $orders=$this->orders(); return response()->view('staff.orders._queue',compact('orders'))->header('X-Pending',Order::whereIn('status',['awaiting_payment','pending'])->count())->header('Cache-Control','no-store, no-cache, must-revalidate'); }
     public function count() { return response()->json(['count'=>Order::whereIn('status',['awaiting_payment','pending'])->count()])->header('Cache-Control','no-store, no-cache, must-revalidate'); }
+    public function alerts()
+    {
+        $statuses = ['awaiting_payment', 'pending'];
+        $count = Order::whereIn('status', $statuses)->count();
+        $items = Order::with('user:id,name')
+            ->whereIn('status', $statuses)
+            ->latest('id')
+            ->limit(8)
+            ->get()
+            ->map(fn ($order) => [
+                'order_number' => $order->order_number,
+                'customer' => $order->user?->name ?? 'Customer',
+                'status' => strtoupper(str_replace('_', ' ', $order->status)),
+                'total' => (float) $order->total,
+                'created_at' => $order->created_at?->diffForHumans(),
+            ])
+            ->values();
+
+        return response()->json(['count' => $count, 'items' => $items])
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate');
+    }
     public function advance(Order $order, Request $request, OrderWorkflow $workflow)
     {
         try {
@@ -63,5 +84,5 @@ class OrderController extends Controller
         });
         return back()->with('success','Naitala ang cash handover at nakumpleto ang order.');
     }
-    private function orders() { return Order::with(['user:id,name','items','delivery.rider:id,name'])->whereIn('status',['awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered'])->latest('id')->limit(100)->get(); }
+    private function orders() { return Order::with(['user:id,name,phone','items.product:id,name,image','items.options','delivery.rider:id,name'])->whereIn('status',['awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered'])->latest('id')->limit(100)->get(); }
 }

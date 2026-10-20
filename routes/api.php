@@ -3,18 +3,26 @@
 use App\Http\Controllers\Api\AddressController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\FavoriteController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\HomeController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymongoWebhookController;
 use App\Http\Controllers\Api\RiderController;
+use App\Http\Controllers\Api\SupportContactController;
+use App\Http\Controllers\Api\SupportChatController;
 use Illuminate\Support\Facades\Route;
 
 // Base URL: /api/v1
 Route::prefix('v1')->group(function () {
 
     // Public
+    Route::get('support/contact', [SupportContactController::class, 'show'])->middleware('throttle:30,1');
+    Route::post('support/guest/conversations', [SupportChatController::class, 'startGuest'])->middleware('throttle:5,1');
+    Route::get('support/guest/conversations/{uuid}', [SupportChatController::class, 'showGuest'])->middleware('throttle:60,1')->name('api.support.guest.show');
+    Route::post('support/guest/conversations/{uuid}/messages', [SupportChatController::class, 'sendGuest'])->middleware('throttle:20,1');
+    Route::get('support/guest/conversations/{uuid}/attachments/{message}', [SupportChatController::class, 'guestAttachment'])->middleware('throttle:60,1')->name('api.support.guest.attachment');
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
     Route::post('auth/login',    [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('auth/google', [AuthController::class, 'googleLogin'])->middleware('throttle:10,1');
@@ -31,6 +39,8 @@ Route::prefix('v1')->group(function () {
     // Naka-login
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/broadcasting/auth', \Illuminate\Broadcasting\BroadcastController::class.'@authenticate');
+        Route::post('notifications/device-token', [DeviceTokenController::class, 'store']);
+        Route::delete('notifications/device-token', [DeviceTokenController::class, 'destroy']);
         Route::post('auth/logout',       [AuthController::class, 'logout']);
         Route::get('profile',            [AuthController::class, 'profile']);
         Route::put('profile',            [AuthController::class, 'updateProfile']);
@@ -39,6 +49,11 @@ Route::prefix('v1')->group(function () {
 
         // ===== CUSTOMER =====
         Route::middleware('role:customer')->group(function () {
+            Route::get('support/conversation', [SupportChatController::class, 'current']);
+            Route::post('support/conversations', [SupportChatController::class, 'start'])->middleware('throttle:10,1');
+            Route::get('support/conversations/{conversation}', [SupportChatController::class, 'show'])->whereNumber('conversation');
+            Route::post('support/conversations/{conversation}/messages', [SupportChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:20,1');
+            Route::get('support/conversations/{conversation}/attachments/{message}', [SupportChatController::class, 'attachment'])->whereNumber('conversation')->name('api.support.attachment');
             Route::get('app-config',        [HomeController::class, 'config']);
             Route::get('addresses',         [AddressController::class, 'index']);
             Route::post('addresses',        [AddressController::class, 'store']);
@@ -80,4 +95,5 @@ Route::prefix('v1')->group(function () {
         });
     });
 });
+
 

@@ -111,12 +111,15 @@ class RiderController extends Controller
     }
     private function resource(Delivery $d):array
     {
-        $o=$d->order;$user=$o->user;
+        // A delivery can outlive its order (for example, an order was soft-deleted).
+        // Keep rider history readable instead of throwing a 500 on a missing relation.
+        $o=$d->order;
+        $user=$o?->user;
         return ['id'=>$d->id,'status'=>$d->status,'distance_km'=>$d->distance_km,'proof_photo_url'=>$d->proof_photo_url,
             'customer'=>['name'=>$user?->name,'phone'=>$user?->phone],
             'shop'=>['lat'=>(float)Settings::get('shop_lat',0),'lng'=>(float)Settings::get('shop_lng',0)],
-            'order'=>['id'=>$o->id,'order_number'=>$o->order_number,'total'=>(float)$o->total,'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'address'=>$o->delivery_address,'lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng,'notes'=>$o->notes,
-                'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'options'=>$i->options->pluck('option_name')->values()])->values()],
+            'order'=>$o ? ['id'=>$o->id,'order_number'=>$o->order_number,'total'=>(float)$o->total,'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'address'=>$o->delivery_address,'lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng,'notes'=>$o->notes,
+                'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'options'=>$i->options->pluck('option_name')->values()])->values()] : null,
         ];
     }
     private function log($o,int $uid,string $status):void { DB::table('order_status_logs')->insert(['order_id'=>$o->id,'status'=>$status,'changed_by'=>$uid,'created_at'=>now()]); }

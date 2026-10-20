@@ -16,6 +16,10 @@ class Activity
             'ip_address'  => request()->ip(),
             'created_at'  => now(),
         ]);
-        LiveUpdate::dispatch('activity', $id);
+        try {
+            LiveUpdate::dispatch('activity', $id);
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 }

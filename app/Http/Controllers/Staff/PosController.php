@@ -12,7 +12,9 @@ class PosController extends Controller
 {
     public function index()
     {
-        $categories = Category::where('is_active', true)->orderBy('sort_order')->get(['id', 'name']);
+        $categories = Category::where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'image'])
+            ->map(fn ($category) => ['id' => $category->id, 'name' => $category->name, 'image' => $category->image_url])
+            ->values();
 
         $products = \App\Models\Product::with(['optionGroups.options' => fn ($q) => $q->where('is_available', true)])
             ->where('is_available', true)

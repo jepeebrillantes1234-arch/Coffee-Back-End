@@ -24,6 +24,17 @@
 <div id="queue" aria-live="polite">
     @include('staff.orders._queue')
 </div>
+
+<dialog id="order-view-dialog" class="m-auto max-h-[90vh] w-[min(56rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border-0 bg-cream p-0 text-espresso shadow-2xl backdrop:bg-black/60">
+    <div class="sticky top-0 z-10 flex items-center justify-between border-b border-espresso/10 bg-white px-5 py-4">
+        <div>
+            <h2 id="order-view-title" class="text-lg font-semibold">Order details</h2>
+            <p class="text-sm text-espresso/60">Review the customer's items and order information.</p>
+        </div>
+        <button id="order-view-close" type="button" class="rounded-lg border border-espresso/15 bg-white px-3 py-2 text-sm font-medium hover:bg-cream" aria-label="Close order details">Close <span class="ml-1 text-espresso/55">(Esc)</span></button>
+    </div>
+    <div id="order-view-content" class="p-5"></div>
+</dialog>
 @endsection
 
 @push('scripts')
@@ -35,6 +46,10 @@
     const liveDot = document.getElementById('orders-live-dot');
     const toast = document.getElementById('orders-toast');
     const notificationsButton = document.getElementById('notifications-btn');
+    const orderDialog = document.getElementById('order-view-dialog');
+    const orderDialogTitle = document.getElementById('order-view-title');
+    const orderDialogContent = document.getElementById('order-view-content');
+    const orderDialogClose = document.getElementById('order-view-close');
 
     let pendingCount = {{ (int) $pendingCount }};
     let liveConnected = false;
@@ -74,6 +89,31 @@
             });
         }
     }
+
+    // Keep the order detail view outside the periodically refreshed queue so it
+    // stays open while live updates replace the cards behind it.
+    queue.addEventListener('click', event => {
+        const summary = event.target.closest('details > summary');
+        if (!summary) return;
+        event.preventDefault();
+        const card = summary.closest('article');
+        const details = summary.nextElementSibling;
+        if (!card || !details) return;
+        orderDialogTitle.textContent = `Order ${card.querySelector('h2')?.textContent?.trim() || 'details'}`;
+        const detailView = details.cloneNode(true);
+        detailView.open = true;
+        orderDialogContent.replaceChildren(detailView);
+        if (!orderDialog.open) orderDialog.showModal();
+    });
+
+    orderDialogClose.addEventListener('click', () => orderDialog.close());
+    orderDialog.addEventListener('click', event => {
+        if (event.target === orderDialog) orderDialog.close();
+    });
+    orderDialog.addEventListener('cancel', event => {
+        event.preventDefault();
+        orderDialog.close();
+    });
 
     async function refreshOrders() {
         if (isRefreshing || document.hidden) return;
