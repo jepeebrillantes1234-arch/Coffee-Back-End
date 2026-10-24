@@ -12,17 +12,18 @@
     @if ($banner->exists) @method('PUT') @endif
 
     <div>
-        <label class="block text-sm font-medium mb-1">Small text (top)</label>
+        <label class="block text-sm font-medium mb-1">Banner title</label>
         <input id="f-title" name="title" maxlength="60" value="{{ old('title', $banner->title) }}" placeholder="First Order Discount" class="{{ $in }}">
     </div>
     <div>
-        <label class="block text-sm font-medium mb-1">Large text <span class="text-red-500">*</span></label>
+        <label class="block text-sm font-medium mb-1">Headline <span class="text-red-500">*</span></label>
         <input id="f-headline" name="headline" maxlength="40" required value="{{ old('headline', $banner->headline) }}" placeholder="GET {percent}% OFF" class="{{ $in }}">
         @error('headline') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
     </div>
     <div>
-        <label class="block text-sm font-medium mb-1">Bottom text</label>
-        <input id="f-subtitle" name="subtitle" maxlength="80" value="{{ old('subtitle', $banner->subtitle) }}" placeholder="on your order!" class="{{ $in }}">
+        <label class="block text-sm font-medium mb-1">Description</label>
+        <textarea id="f-description" name="description" maxlength="1000" rows="3" placeholder="Describe this banner" class="{{ $in }}">{{ old('description', $banner->description) }}</textarea>
+        @error('description') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
     </div>
 
     <div class="text-xs bg-cream rounded-lg px-3 py-2 text-espresso/80">
@@ -42,6 +43,27 @@
         <input id="f-image" type="file" name="image" accept="image/*" class="text-sm">
         <p class="text-xs text-espresso/50 mt-1">Vertical image of around 600×700 px works best, with the coffee centered. Up to 2 MB.</p>
         @error('image') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+            <label class="block text-sm font-medium mb-1">Banner type</label>
+            <select name="banner_type" class="{{ $in }}">
+                @foreach (['order_now' => 'Order Now', 'promo' => 'Promo', 'membership' => 'Membership', 'redeem' => 'Redeem', 'rewards' => 'Rewards', 'custom' => 'Custom'] as $value => $label)
+                    <option value="{{ $value }}" @selected(old('banner_type', $banner->banner_type) === $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+            @error('banner_type') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Tap destination</label>
+            <select name="destination" class="{{ $in }}">
+                @foreach (['menu' => 'Menu / Order Now', 'promos' => 'Promotions', 'profile' => 'Profile', 'cart' => 'Cart', 'orders' => 'My Orders'] as $value => $label)
+                    <option value="{{ $value }}" @selected(old('destination', $banner->destination) === $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+            @error('destination') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+        </div>
     </div>
 
     <div class="grid sm:grid-cols-2 gap-4">
@@ -78,16 +100,13 @@
 {{-- ========== PREVIEW ========== --}}
 <div>
     <p class="text-sm font-medium mb-2">Preview (how it looks in the app)</p>
-    <div class="rounded-3xl p-4" style="background:#3b2a24">
-        <div class="flex rounded-[20px] overflow-hidden border-2 border-white shadow-lg h-44" style="background:linear-gradient(135deg,#9A6A3A,#5B3A26)">
-            <div class="flex-1 flex flex-col justify-center px-4 py-3 text-white min-w-0">
-                <p id="pv-title" class="italic text-[15px] font-serif"></p>
-                <p id="pv-headline" class="font-black italic text-3xl tracking-wide leading-tight break-words"></p>
-                <p id="pv-subtitle" class="italic text-[15px] font-serif"></p>
-            </div>
-            <div id="pv-img-wrap" class="w-36 shrink-0 {{ $banner->image ? '' : 'hidden' }}">
-                <img id="pv-img" src="{{ $banner->image ? asset('storage/' . $banner->image) : '' }}" class="w-full h-full object-cover">
-            </div>
+    <div class="relative h-44 overflow-hidden rounded-[18px] bg-neutral-200">
+        <img id="pv-img" src="{{ $banner->image ? asset('storage/' . $banner->image) : '' }}" class="absolute inset-0 h-full w-full object-cover {{ $banner->image ? '' : 'hidden' }}">
+        <div class="absolute inset-0 bg-gradient-to-r from-black/75 via-black/35 to-transparent"></div>
+        <div class="relative z-10 flex h-full max-w-[80%] flex-col justify-center px-5 py-4 text-white">
+            <p id="pv-title" class="italic text-[15px] font-serif"></p>
+            <p id="pv-headline" class="font-black italic text-3xl tracking-wide leading-tight break-words"></p>
+            <p id="pv-description" class="italic text-[15px] font-serif"></p>
         </div>
     </div>
 </div>
@@ -103,14 +122,14 @@ const $ = id => document.getElementById(id);
 function paint() {
   $('pv-title').textContent = fill($('f-title').value);
   $('pv-headline').textContent = fill($('f-headline').value) || 'Large text';
-  $('pv-subtitle').textContent = fill($('f-subtitle').value);
+  $('pv-description').textContent = $('f-description').value;
 }
-['f-title', 'f-headline', 'f-subtitle'].forEach(id => $(id).addEventListener('input', paint));
+['f-title', 'f-headline', 'f-description'].forEach(id => $(id).addEventListener('input', paint));
 $('f-image').addEventListener('change', e => {
   const f = e.target.files[0];
   if (!f) return;
   const r = new FileReader();
-  r.onload = ev => { $('pv-img').src = ev.target.result; $('pv-img-wrap').classList.remove('hidden'); };
+  r.onload = ev => { $('pv-img').src = ev.target.result; $('pv-img').classList.remove('hidden'); };
   r.readAsDataURL(f);
 });
 paint();

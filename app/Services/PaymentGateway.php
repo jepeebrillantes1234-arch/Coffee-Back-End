@@ -22,9 +22,9 @@ class PaymentGateway
 
     private function fail($res, string $what): never
     {
-        $detail = $res->json('errors.0.detail') ?? $res->body();
-        Log::warning("PayMongo {$what} failed", ['status' => $res->status(), 'body' => $res->json()]);
-        throw new \RuntimeException("PayMongo: {$detail}");
+        $code = $res->json('errors.0.code');
+        Log::warning("PayMongo {$what} failed", ['status' => $res->status(), 'provider_error_code' => is_string($code) ? $code : null]);
+        throw new \RuntimeException("PayMongo {$what} request failed with HTTP {$res->status()}.");
     }
 
     /** Gumagawa ng QRPh checkout page para sa order. */
@@ -77,30 +77,30 @@ class PaymentGateway
 
         $res = $this->http('v1')->get('/checkout_sessions/' . $p->provider_session_id);
         if (!$res->successful()) {
-            Log::warning('PayMongo retrieve failed', ['status' => $res->status(), 'body' => $res->json()]);
+            Log::warning('PayMongo retrieve failed', ['status' => $res->status()]);
             return false;
         }
 
         foreach ((array) $res->json('data.attributes.payments', []) as $pay) {
             if (data_get($pay, 'attributes.status') === 'paid') {
-                $this->markPaid($order, data_get($pay, 'id'), (int) data_get($pay, 'attributes.amount'));
-                return true;
+                return $this->markPaid($order, data_get($pay, 'id'), (int) data_get($pay, 'attributes.amount'));
             }
         }
         return false;
     }
 
     /** Idempotent - ligtas kahit ilang beses tawagin (webhook + sync). */
-    public function markPaid(Order $order, ?string $paymentId, ?int $amountCentavos = null): void
+    public function markPaid(Order $order, ?string $paymentId, ?int $amountCentavos = null): bool
     {
         $late = false;
         $moved = false;
+        $accepted = false;
 
-        DB::transaction(function () use ($order, $paymentId, $amountCentavos, &$late, &$moved) {
+        DB::transaction(function () use ($order, $paymentId, $amountCentavos, &$late, &$moved, &$accepted) {
             $o = Order::whereKey($order->id)->lockForUpdate()->first();
             if (!$o || in_array($o->payment_status, ['paid', 'refunded'], true)) return;
 
-            if ($amountCentavos !== null && abs($amountCentavos - (int) round($o->total * 100)) > 1) {
+            if ($amountCentavos !== null && $amountCentavos !== (int) round($o->total * 100)) {
                 Log::error('PayMongo amount mismatch', ['order' => $o->order_number, 'paid' => $amountCentavos, 'expected' => $o->total]);
                 return;
             }
@@ -121,6 +121,7 @@ class PaymentGateway
                 $late = true;                    // nagbayad matapos mag-expire - ibalik ang pera
             }
             $o->save();
+            $accepted = true;
         });
 
         $fresh = $order->fresh();
@@ -129,6 +130,7 @@ class PaymentGateway
         } elseif ($moved) {
             Notifier::order($fresh, 'pending');
         }
+        return $accepted;
     }
 
     public function refundOrder(Order $order): void
@@ -158,8 +160,8 @@ class PaymentGateway
     {
         $p->update(['status' => 'refunded']);
         $order->update(['payment_status' => 'refunded']);
-        Notifier::send($order->user_id, 'Na-refund ang bayad 💸',
-            'Ibabalik ang ₱' . number_format($p->amount, 2) . ' sa QRPh mo para sa ' . $order->order_number . '.',
+        Notifier::send($order->user_id, 'Na-refund ang bayad ðŸ’¸',
+            'Ibabalik ang â‚±' . number_format($p->amount, 2) . ' sa QRPh mo para sa ' . $order->order_number . '.',
             'refund', ['order_id' => $order->id]);
     }
 
@@ -203,7 +205,7 @@ class PaymentGateway
                 'order_id' => $o->id, 'status' => 'cancelled', 'changed_by' => null, 'created_at' => now(),
             ]);
             PromoUsage::where('order_id', $o->id)->delete();
-            Payment::where('order_id', $o->id)->update(['status' => 'failed']);
+            Payment::where('order_id', $o->id)->where('status', 'pending')->update(['status' => 'expired']);
             Notifier::order($o, 'expired');
             $count++;
         }
@@ -237,9 +239,21 @@ class PaymentGateway
 
         if ($type !== 'checkout_session.payment.paid' || !$res) return;
 
-        $order = Order::where('order_number', data_get($res, 'attributes.reference_number'))->first();
+        $reference = (string) data_get($res, 'attributes.reference_number', '');
+        $order = Order::where('order_number', $reference)->first();
         if (!$order) {
-            Log::warning('PayMongo webhook: walang order', ['ref' => data_get($res, 'attributes.reference_number')]);
+            $paid = false;
+            foreach ((array) data_get($res, 'attributes.payments', []) as $membershipPayment) {
+                if (data_get($membershipPayment, 'attributes.status') === 'paid') {
+                    $paid = app(LoyaltyService::class)->markPaidByReference(
+                        $reference,
+                        data_get($membershipPayment, 'id'),
+                        (int) data_get($membershipPayment, 'attributes.amount'),
+                    );
+                    break;
+                }
+            }
+            if (!$paid) Log::warning('PayMongo webhook: walang order o membership payment', ['ref' => $reference]);
             return;
         }
 

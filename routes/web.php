@@ -12,6 +12,9 @@ use App\Http\Controllers\Admin\SupportChatController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductOptionController;
 use App\Http\Controllers\Admin\PromoController;
+use App\Http\Controllers\Admin\HomePromoController;
+use App\Http\Controllers\Admin\MembershipController;
+use App\Http\Controllers\Admin\RewardController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReviewController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -70,6 +73,12 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Promos + Settings
     Route::resource('promos', PromoController::class)->except('show');
+    Route::get('home-promos', [HomePromoController::class, 'index'])->name('home-promos.index');
+    Route::post('home-promos', [HomePromoController::class, 'store'])->name('home-promos.store');
+    Route::put('home-promos/best-sellers', [HomePromoController::class, 'bestSellers'])->name('home-promos.best-sellers');
+    Route::get('home-promos/{homePromo}/edit', [HomePromoController::class, 'edit'])->name('home-promos.edit');
+    Route::put('home-promos/{homePromo}', [HomePromoController::class, 'update'])->name('home-promos.update');
+    Route::delete('home-promos/{homePromo}', [HomePromoController::class, 'destroy'])->name('home-promos.destroy');
     Route::get('settings',  [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('settings',  [SettingsController::class, 'update'])->name('settings.update');
 
@@ -100,8 +109,17 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('gps-monitor',      [GpsMonitorController::class, 'index'])->name('gps.index');
     Route::get('gps-monitor/data', [GpsMonitorController::class, 'data'])->name('gps.data');
 
+    // Membership and reward administration
+    Route::get('memberships', [MembershipController::class, 'index'])->name('memberships.index');
+    Route::get('memberships/{membership}', [MembershipController::class, 'show'])->whereNumber('membership')->name('memberships.show');
+    Route::post('memberships/{membership}/toggle', [MembershipController::class, 'toggle'])->whereNumber('membership')->name('memberships.toggle');
+    Route::post('redemptions/{redemption}/claim', [MembershipController::class, 'claim'])->whereNumber('redemption')->name('redemptions.claim');
+    Route::resource('rewards', RewardController::class)->except('show');
+    Route::post('rewards/{reward}/toggle', [RewardController::class, 'toggle'])->name('rewards.toggle');
     // Payments, Reviews
     Route::get('payments',                 [PaymentController::class, 'index'])->name('payments.index');
+    Route::get('payments/settings', [PaymentController::class, 'settings'])->name('payments.settings');
+    Route::put('payments/settings', [PaymentController::class, 'updateSettings'])->name('payments.settings.update');
     Route::post('payments/{order}/paid',   [PaymentController::class, 'markPaid'])->name('payments.paid');
     Route::post('payments/{order}/refund', [PaymentController::class, 'refund'])->name('payments.refund');
     Route::get('reviews',                  [ReviewController::class, 'index'])->name('reviews.index');
@@ -116,6 +134,7 @@ if (is_file(__DIR__ . '/staff.php')) {
     require __DIR__ . '/staff.php';
 }
 require __DIR__ . '/promos_extra.php';
+require __DIR__ . '/banners.php';
 
 
 

@@ -4,8 +4,17 @@
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <div>
         <a href="{{ route('admin.support.index') }}" class="text-caramel">Back to inbox</a>
-        <h1 class="mt-2 text-2xl font-semibold">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</h1>
-        <p class="text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact supplied' }} · {{ ucfirst(str_replace('_', ' ', $conversation->status)) }}</p>
+        <div class="mt-2 flex items-center gap-3">
+            @if($conversation->user?->avatar)
+                <img src="{{ asset('storage/' . ltrim($conversation->user->avatar, '/')) }}" alt="Customer profile photo" class="h-12 w-12 rounded-full object-cover ring-2 ring-white shadow-sm">
+            @else
+                <div class="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-lg font-semibold text-espresso">{{ strtoupper(substr($conversation->user->name ?? $conversation->guest_name ?? 'C', 0, 1)) }}</div>
+            @endif
+            <div>
+                <h1 class="text-2xl font-semibold">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</h1>
+                <p class="text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact supplied' }} · {{ ucfirst(str_replace('_', ' ', $conversation->status)) }}</p>
+            </div>
+        </div>
     </div>
     <div class="flex items-center gap-2">
         @if($conversation->status !== 'closed')
@@ -32,10 +41,19 @@
     </section>
     <aside class="space-y-4">
         <section class="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 class="font-semibold">Customer</h2>
-            <p class="mt-2 text-sm">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</p>
-            <p class="break-all text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact' }}</p>
-            @if($conversation->user?->phone)<p class="text-sm text-espresso/60">{{ $conversation->user->phone }}</p>@endif
+            <h2 class="font-semibold">Customer profile</h2>
+            <div class="mt-3 flex items-center gap-3">
+                @if($conversation->user?->avatar)
+                    <img src="{{ asset('storage/' . ltrim($conversation->user->avatar, '/')) }}" alt="Customer profile photo" class="h-16 w-16 rounded-full object-cover ring-2 ring-amber-100">
+                @else
+                    <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-amber-100 text-2xl font-semibold text-espresso">{{ strtoupper(substr($conversation->user->name ?? $conversation->guest_name ?? 'C', 0, 1)) }}</div>
+                @endif
+                <div class="min-w-0">
+                    <p class="break-words text-sm font-semibold">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</p>
+                    <p class="break-all text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact' }}</p>
+                </div>
+            </div>
+            @if($conversation->user?->phone)<p class="mt-2 text-sm text-espresso/60">Phone: {{ $conversation->user->phone }}</p>@endif
         </section>
         @if($conversation->user_id)
         <section class="rounded-2xl bg-white p-4 shadow-sm">

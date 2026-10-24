@@ -1,6 +1,15 @@
 @foreach($conversation->messages as $message)
     @php($mine = $message->sender_type === 'admin')
-    <div class="flex {{ $mine ? 'justify-end' : 'justify-start' }}">
+    <div class="flex items-end gap-2 {{ $mine ? 'justify-end' : 'justify-start' }}">
+        @if(!$mine)
+            @if($message->sender_type === 'assistant')
+                <div class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-espresso"><span class="text-sm">☕</span></div>
+            @elseif($conversation->user?->avatar)
+                <img src="{{ asset('storage/' . ltrim($conversation->user->avatar, '/')) }}" alt="Customer profile" class="mb-1 h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-black/10">
+            @else
+                <div class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-espresso">{{ strtoupper(substr($conversation->user->name ?? $conversation->guest_name ?? 'C', 0, 1)) }}</div>
+            @endif
+        @endif
         <div class="max-w-[85%] rounded-2xl {{ $mine ? 'bg-espresso text-white' : ($message->sender_type === 'assistant' ? 'bg-amber-50 text-espresso' : 'bg-gray-100 text-espresso') }} p-3">
             <div class="mb-1 text-[11px] font-semibold">{{ $mine ? 'You · Administrator' : ($message->sender_type === 'assistant' ? 'KJM Assistant' : 'Customer') }}</div>
             @if($message->body)<p class="whitespace-pre-wrap text-sm">{{ $message->body }}</p>@endif
@@ -12,5 +21,12 @@
             @endif
             <div class="mt-1 text-right text-[10px] opacity-60">{{ $message->created_at->format('M j, g:i A') }}</div>
         </div>
+        @if($mine)
+            @if($message->sender?->avatar)
+                <img src="{{ asset('storage/' . ltrim($message->sender->avatar, '/')) }}" alt="Administrator profile" class="mb-1 h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-black/10">
+            @else
+                <div class="mb-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-espresso text-xs font-semibold text-white">{{ strtoupper(substr($message->sender?->name ?? 'A', 0, 1)) }}</div>
+            @endif
+        @endif
     </div>
 @endforeach

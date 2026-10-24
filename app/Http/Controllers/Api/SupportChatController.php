@@ -163,7 +163,7 @@ class SupportChatController extends Controller
 
     private function payload(SupportConversation $conversation): array
     {
-        $conversation->load('messages');
+        $conversation->load('messages.sender');
         return [
             'id' => $conversation->id,
             'guest_uuid' => $conversation->guest_uuid,
@@ -180,6 +180,10 @@ class SupportChatController extends Controller
                 return [
                     'id' => $message->id,
                     'sender_type' => $message->sender_type,
+                    'sender_name' => $message->sender?->name,
+                    'sender_avatar_url' => $message->sender?->avatar
+                        ? asset('storage/' . ltrim($message->sender->avatar, '/'))
+                        : null,
                     'body' => $message->body,
                     'attachment_url' => $attachmentUrl,
                     'attachment_mime' => $message->attachment_mime,

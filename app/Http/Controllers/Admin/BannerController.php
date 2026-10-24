@@ -19,7 +19,7 @@ class BannerController extends Controller
 
     public function create()
     {
-        return view('admin.banners.form', ['banner' => new Banner(['is_active' => true, 'audience' => 'all', 'sort_order' => 0]), 'tokens' => $this->tokens()]);
+        return view('admin.banners.form', ['banner' => new Banner(['is_active' => true, 'audience' => 'all', 'banner_type' => 'order_now', 'destination' => 'menu', 'sort_order' => 0]), 'tokens' => $this->tokens()]);
     }
 
     public function store(Request $request)
@@ -66,8 +66,10 @@ class BannerController extends Controller
         $data = $request->validate([
             'title'      => 'nullable|string|max:60',
             'headline'   => 'required|string|max:40',
-            'subtitle'   => 'nullable|string|max:80',
+            'description' => 'nullable|string|max:1000',
             'image'      => 'nullable|image|max:2048',
+            'banner_type' => 'required|in:order_now,promo,membership,redeem,rewards,custom',
+            'destination' => 'required|in:menu,promos,profile,cart,orders',
             'audience'   => 'required|in:all,new_customers',
             'sort_order' => 'nullable|integer|min:0',
             'starts_at'  => 'nullable|date',

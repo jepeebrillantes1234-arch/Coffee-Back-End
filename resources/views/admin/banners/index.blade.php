@@ -5,12 +5,12 @@
     <h1 class="text-2xl font-semibold">Home Banners</h1>
     <a href="{{ route('admin.banners.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium">+ New Banner</a>
 </div>
-<p class="text-sm text-espresso/60 mb-6">These banners appear at the top of the Customer App Home screen. If there are no active banners, the automatic "First Order Discount" banner will be used.</p>
+<p class="text-sm text-espresso/60 mb-6">These banners appear in display order on the Customer App Home screen. Promo banners open the existing Promotions page and never apply a promo automatically.</p>
 
 <div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
-            <tr><th class="p-3">Image</th><th class="p-3">Text</th><th class="p-3">Audience</th><th class="p-3">Schedule</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
+            <tr><th class="p-3">Image</th><th class="p-3">Text</th><th class="p-3">Type</th><th class="p-3">Destination</th><th class="p-3">Audience</th><th class="p-3">Schedule</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
         </thead>
         <tbody>
         @forelse ($banners as $b)
@@ -22,8 +22,10 @@
                 <td class="p-3">
                     <p class="text-xs text-espresso/60">{{ $b->title }}</p>
                     <p class="font-semibold">{{ $b->headline }}</p>
-                    <p class="text-xs text-espresso/60">{{ $b->subtitle }}</p>
+                    <p class="text-xs text-espresso/60">{{ $b->description }}</p>
                 </td>
+                <td class="p-3">{{ str($b->banner_type)->replace('_', ' ')->title() }}</td>
+                <td class="p-3">{{ str($b->destination)->title() }}</td>
                 <td class="p-3">{{ $b->audience === 'new_customers' ? '🆕 New customers only' : '👥 All' }}</td>
                 <td class="p-3 text-xs">
                     {{ $b->starts_at ? $b->starts_at->format('M d, Y') : 'immediate' }} → {{ $b->ends_at ? $b->ends_at->format('M d, Y') : 'indefinite' }}
@@ -39,7 +41,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="7" class="p-6 text-center text-espresso/50">No banners yet. Create your first one!</td></tr>
+            <tr><td colspan="9" class="p-6 text-center text-espresso/50">No banners yet. Create your first one!</td></tr>
         @endforelse
         </tbody>
     </table>

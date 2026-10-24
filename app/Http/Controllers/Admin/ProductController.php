@@ -78,9 +78,15 @@ class ProductController extends Controller
             'name'        => 'required|string|max:150',
             'description' => 'nullable|string|max:2000',
             'base_price'  => 'required|numeric|min:0|max:99999',
+            'discount_type' => 'nullable|in:percent,fixed',
+            'discount_value' => 'nullable|numeric|min:0|max:99999',
+            'discount_starts_at' => 'nullable|date',
+            'discount_ends_at' => 'nullable|date|after_or_equal:discount_starts_at',
             'image'       => 'nullable|image|max:2048',
         ]);
         $data['is_available'] = $request->boolean('is_available');
+        $data['discount_is_active'] = $request->boolean('discount_is_active') && !empty($data['discount_type']) && (float)($data['discount_value'] ?? 0) > 0;
+        if (!$data['discount_is_active']) { $data['discount_type'] = null; $data['discount_value'] = 0; }
         unset($data['image']);
         return $data;
     }

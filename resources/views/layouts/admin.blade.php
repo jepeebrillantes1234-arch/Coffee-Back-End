@@ -34,6 +34,10 @@
         body[data-admin-theme=dark] .workspace .dashboard .top-item{border-color:#40352f}
         body[data-admin-theme=dark] .workspace .dashboard .orders-table thead{background:#302721;color:#e8dfd7}
         body[data-admin-theme=dark] .workspace .dashboard .orders-table tbody tr:hover{background:#302721}
+        /* Responsive content styles for admin pages (dashboard keeps its own layout). */
+        .admin-page-content{min-width:0;width:100%}.admin-page-content img,.admin-page-content video{max-width:100%}.admin-page-content input[type=file]{max-width:100%}.admin-page-content table{display:block;width:100%;min-width:680px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+        @media(max-width:850px){.admin-page-content{overflow-wrap:anywhere}.workspace.admin-responsive .workspace-heading{align-items:flex-start;gap:10px}.workspace.admin-responsive .workspace-heading .system-status{flex:none;padding:7px 9px;font-size:10px}}
+        @media(max-width:640px){.admin-page-content h1{font-size:1.35rem;line-height:1.25}.admin-page-content :is(input,select,textarea,button){max-width:100%}.admin-page-content input[type=file]{display:block;width:100%;font-size:12px}.admin-page-content [class~="grid-cols-2"]{grid-template-columns:minmax(0,1fr)}.admin-page-content > .flex{flex-wrap:wrap}.admin-page-content table{min-width:620px}.workspace.admin-responsive .workspace-heading{flex-wrap:wrap}.workspace.admin-responsive .workspace-heading>div{min-width:0}}
         @yield('admin-styles')
     </style>
 </head>
@@ -64,8 +68,8 @@
     ];
     $groups = [
         'Overview' => [['Dashboard', route('admin.dashboard'), 'admin', 'grid']],
-        'Catalog' => [['Products', route('admin.products.index'), 'admin/products*', 'box'], ['Categories', route('admin.categories.index'), 'admin/categories*', 'folder'], ['Promos', route('admin.promos.index'), 'admin/promos*', 'tag'], ['Discount & Fees', route('admin.settings.edit'), 'admin/settings*', 'dollar']],
-        'People' => [['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'], ['Staff', route('admin.users.index', 'staff'), 'admin/users/staff*', 'badge'], ['Riders', route('admin.users.index', 'rider'), 'admin/users/rider*', 'bike']],
+        'Catalog' => [['Products', route('admin.products.index'), 'admin/products*', 'box'], ['Categories', route('admin.categories.index'), 'admin/categories*', 'folder'], ['Promos', route('admin.promos.index'), 'admin/promos*', 'tag'], ['Rewards', route('admin.rewards.index'), 'admin/rewards*', 'star'], ['Banners', route('admin.banners.index'), 'admin/banners*', 'home'], ['Discount & Fees', route('admin.settings.edit'), 'admin/settings*', 'dollar']],
+        'People' => [['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'], ['Memberships', route('admin.memberships.index'), 'admin/memberships*', 'card'], ['Staff', route('admin.users.index', 'staff'), 'admin/users/staff*', 'badge'], ['Riders', route('admin.users.index', 'rider'), 'admin/users/rider*', 'bike']],
         'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file'], ['Customer Support', route('admin.support.index'), 'admin/support*', 'users']],
     ];
     $svg = fn (string $key, string $class = '') => '<svg class="' . $class . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($icons[$key] ?? '') . '</svg>';
@@ -102,11 +106,17 @@
             <a href="{{ route('admin.support.index') }}" class="icon-button support-bell-link" id="adminSupportBell" aria-label="Customer support notifications">{!! $svg('bell') !!}<span id="supportBellBadge" class="support-bell-badge" hidden>0</span></a>
             <button type="button" class="admin-account account-trigger" id="adminProfileOpen" aria-label="Open profile settings"><span class="account-avatar">@if($user?->avatar)<img src="{{ asset('storage/'.$user->avatar) }}" alt="">@else{{ strtoupper(substr($user->name ?? 'A', 0, 1)) }}@endif</span><span class="account-copy"><span class="account-name">{{ $user->name ?? 'Admin' }}</span><span class="account-role">Administrator</span></span><span class="account-chevron" aria-hidden="true">&#8964;</span></button>
         </header>
-        <main class="workspace">
+        <main class="workspace @if (!request()->routeIs('admin.dashboard')) admin-responsive @endif">
             <div class="workspace-heading"><div><div class="eyebrow">Admin Workspace</div><div class="breadcrumb">{!! $svg('home') !!}<strong>@yield('title', 'Dashboard')</strong></div></div><span class="system-status"><i></i>System Active</span></div>
             @if (session('success')) <div class="flash flash-success">{{ session('success') }}</div> @endif
             @if (session('error')) <div class="flash flash-error">{{ session('error') }}</div> @endif
+            @if (request()->routeIs('admin.dashboard'))
             @yield('content')
+            @else
+                <div class="admin-page-content">
+                    @yield('content')
+                </div>
+            @endif
         </main>
     </div>
 </div>

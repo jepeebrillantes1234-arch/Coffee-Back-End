@@ -6,10 +6,12 @@ use App\Http\Controllers\Api\FavoriteController;
 use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\HomeController;
 use App\Http\Controllers\Api\MenuController;
+use App\Http\Controllers\Api\LoyaltyController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymongoWebhookController;
 use App\Http\Controllers\Api\RiderController;
+use App\Http\Controllers\Api\ReverseGeocodeController;
 use App\Http\Controllers\Api\SupportContactController;
 use App\Http\Controllers\Api\SupportChatController;
 use Illuminate\Support\Facades\Route;
@@ -32,6 +34,8 @@ Route::prefix('v1')->group(function () {
     Route::get('products',      [MenuController::class, 'products']);
     Route::get('products/{id}', [MenuController::class, 'show']);
     Route::get('products/{id}/reviews', [MenuController::class, 'reviews']);
+    Route::get('promos', [HomeController::class, 'promos']);
+    Route::get('home-banners', [HomeController::class, 'banners'])->middleware('throttle:60,1');
 
     // Tinatawag ng PayMongo (may signature check sa loob)
     Route::post('webhooks/paymongo', PaymongoWebhookController::class);
@@ -55,6 +59,13 @@ Route::prefix('v1')->group(function () {
             Route::post('support/conversations/{conversation}/messages', [SupportChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:20,1');
             Route::get('support/conversations/{conversation}/attachments/{message}', [SupportChatController::class, 'attachment'])->whereNumber('conversation')->name('api.support.attachment');
             Route::get('app-config',        [HomeController::class, 'config']);
+            Route::get('loyalty', [LoyaltyController::class, 'summary']);
+            Route::post('membership/checkout', [LoyaltyController::class, 'checkout'])->middleware('throttle:5,1');
+            Route::post('membership/payment/verify', [LoyaltyController::class, 'verify'])->middleware('throttle:30,1');
+            Route::get('rewards', [LoyaltyController::class, 'rewards']);
+            Route::post('rewards/{reward}/redeem', [LoyaltyController::class, 'redeem'])->middleware('throttle:10,1');
+            Route::get('rewards/redemptions', [LoyaltyController::class, 'redemptions']);
+            Route::get('location/reverse-geocode', ReverseGeocodeController::class)->middleware('throttle:30,1');
             Route::get('addresses',         [AddressController::class, 'index']);
             Route::post('addresses',        [AddressController::class, 'store']);
             Route::delete('addresses/{id}', [AddressController::class, 'destroy']);

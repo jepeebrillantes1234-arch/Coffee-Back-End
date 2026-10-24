@@ -8,11 +8,17 @@ class Banner extends Model
 {
     protected $guarded = [];
     protected $casts = ['is_active' => 'boolean', 'starts_at' => 'datetime', 'ends_at' => 'datetime'];
-    protected $appends = ['image_url'];
+    protected $appends = ['image_url', 'description'];
 
     public function getImageUrlAttribute(): ?string
     {
         return $this->image ? Storage::disk('public')->url($this->image) : null;
+    }
+
+    /** Legacy subtitle stays readable while descriptions use their own column. */
+    public function getDescriptionAttribute(): ?string
+    {
+        return $this->attributes['description'] ?? $this->attributes['subtitle'] ?? null;
     }
 
     /** Aktibo at nasa loob ng iskedyul */

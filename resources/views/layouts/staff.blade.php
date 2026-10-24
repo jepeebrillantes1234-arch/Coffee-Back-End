@@ -153,6 +153,7 @@
         ['staff.menu',         'Menu / Sold out', 'staff/menu*'],
 
         ['staff.transactions', 'Transactions', 'staff/transactions*'],
+        ['staff.rewards.verify', 'Verify Rewards', 'staff/rewards/verify*'],
 
     ];
 
@@ -166,7 +167,7 @@
 
         @foreach ($tabs as [$route, $label, $pattern])
 
-            <a href="{{ route($route) }}" class="{{ request()->is($pattern) ? 'active' : '' }}"><span>{{ $route === 'staff.orders' ? '▤' : ($route === 'staff.pos' ? '▣' : ($route === 'staff.menu' ? '♜' : '◷')) }}</span>{{ $label }}@if($route === 'staff.orders')<span id="nav-pending" class="staff-nav-count {{ $pending ? '' : 'hidden' }}">{{ $pending }}</span>@endif</a>
+            <a href="{{ route($route) }}" class="{{ request()->is($pattern) ? 'active' : '' }}"><span>{{ $route === 'staff.rewards.verify' ? '★' : ($route === 'staff.orders' ? '▤' : ($route === 'staff.pos' ? '▣' : ($route === 'staff.menu' ? '♜' : '◷'))) }}</span>{{ $label }}@if($route === 'staff.orders')<span id="nav-pending" class="staff-nav-count {{ $pending ? '' : 'hidden' }}">{{ $pending }}</span>@endif</a>
 
         @endforeach
 
@@ -180,9 +181,9 @@
 
     <div class="px-5 py-3 flex flex-wrap items-center gap-4">
 
-        <button type="button" id="staffMenuButton" class="staff-menu-button" aria-label="Open navigation">☰</button>
+        <button type="button" id="staffMenuButton" class="staff-menu-button" aria-label="Open navigation">Ã¢ËœÂ°</button>
 
-        <label class="staff-search"><span>⌕</span><input id="staffSearch" type="search" placeholder="Search order number, customer name..."></label>
+        <label class="staff-search"><span>Ã¢Å’â€¢</span><input id="staffSearch" type="search" placeholder="Search order number, customer name..."></label>
 
         <span class="staff-head-spacer"></span>
 
@@ -200,7 +201,7 @@
 
         <button type="button" id="staffProfileButton" class="staff-profile-trigger" aria-label="View staff profile and settings" title="View profile and settings"><span class="staff-head-avatar">@if(auth()->user()->avatar)<img src="{{ asset('storage/' . ltrim(auth()->user()->avatar, '/')) }}" alt="Staff profile photo">@else{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}@endif</span><span class="staff-head-copy"><strong>{{ auth()->user()->name }}</strong><small class="block text-xs text-gray-500">View profile</small></span><span></span></button>
 
-        <span class="font-semibold text-lg">☕ Staff Panel</span>
+        <span class="font-semibold text-lg">Ã¢Ëœâ€¢ Staff Panel</span>
 
         <nav class="flex gap-1">
 
@@ -272,7 +273,7 @@
 
         <div><strong>Staff Settings</strong><div class="staff-panel-label">Manage your profile and account settings.</div></div>
 
-        <button class="staff-panel-close" id="staffProfileClose" type="button" aria-label="Close">×</button>
+        <button class="staff-panel-close" id="staffProfileClose" type="button" aria-label="Close">Ãƒâ€”</button>
 
     </div>
 
@@ -294,7 +295,7 @@
 
     <details class="staff-panel-card staff-details-card">
 
-        <summary class="staff-settings-row"><span class="staff-settings-icon">♙</span><span><strong>Profile Information</strong><small>Edit or review your account details</small></span><b>›</b></summary>
+        <summary class="staff-settings-row"><span class="staff-settings-icon">Ã¢â„¢â„¢</span><span><strong>Profile Information</strong><small>Edit or review your account details</small></span><b>Ã¢â‚¬Âº</b></summary>
 
         <div class="staff-profile-details"><div class="staff-panel-label">Full Name</div><div class="staff-panel-value">{{ auth()->user()->name }}</div>
 
@@ -319,33 +320,33 @@
 
     <section class="staff-panel-card staff-settings-card">
 
-        <a class="staff-settings-row" href="{{ url('/forgot-password') }}"><span class="staff-settings-icon">♙</span><span><strong>Change Password</strong><small>Update your password</small></span><b>›</b></a>
+        <a class="staff-settings-row" href="{{ url('/forgot-password') }}"><span class="staff-settings-icon">Ã¢â„¢â„¢</span><span><strong>Change Password</strong><small>Update your password</small></span><b>Ã¢â‚¬Âº</b></a>
 
     </section>
 
     <section class="staff-panel-card staff-settings-card">
 
-        <button class="staff-settings-row" id="staffNotificationSettings" type="button"><span class="staff-settings-icon">♟</span><span><strong>Notification Settings</strong><small id="staffNotificationState">Manage order and system notifications</small></span><b>›</b></button>
+        <button class="staff-settings-row" id="staffNotificationSettings" type="button"><span class="staff-settings-icon">Ã¢â„¢Å¸</span><span><strong>Notification Settings</strong><small id="staffNotificationState">Manage order and system notifications</small></span><b>Ã¢â‚¬Âº</b></button>
 
     </section>
 
     <section class="staff-panel-card staff-settings-card">
 
-        <div class="staff-settings-row staff-settings-heading"><span class="staff-settings-icon">☼</span><span><strong>Appearance</strong><small>Light / Dark mode and theme settings</small></span></div>
+        <div class="staff-settings-row staff-settings-heading"><span class="staff-settings-icon">Ã¢ËœÂ¼</span><span><strong>Appearance</strong><small>Light / Dark mode and theme settings</small></span></div>
 
-        <div class="staff-theme-row"><button type="button" data-theme-choice="light">☼ &nbsp; Light</button><button type="button" data-theme-choice="dark">☾ &nbsp; Dark</button></div>
+        <div class="staff-theme-row"><button type="button" data-theme-choice="light">Ã¢ËœÂ¼ &nbsp; Light</button><button type="button" data-theme-choice="dark">Ã¢ËœÂ¾ &nbsp; Dark</button></div>
 
     </section>
 
     <details class="staff-panel-card staff-details-card">
 
-        <summary class="staff-settings-row"><span class="staff-settings-icon">?</span><span><strong>Help &amp; Support</strong><small>Get help or contact support</small></span><b>›</b></summary>
+        <summary class="staff-settings-row"><span class="staff-settings-icon">?</span><span><strong>Help &amp; Support</strong><small>Get help or contact support</small></span><b>Ã¢â‚¬Âº</b></summary>
 
         <p class="staff-help-copy">For account access or order system issues, contact your system administrator.</p>
 
     </details>
 
-    <form method="POST" action="{{ route('logout') }}" class="staff-logout-form">@csrf<button type="submit"><span>⇥</span> Log Out</button></form>
+    <form method="POST" action="{{ route('logout') }}" class="staff-logout-form">@csrf<button type="submit"><span>Ã¢â€¡Â¥</span> Log Out</button></form>
 
 </aside>
 
@@ -485,9 +486,9 @@
 
         const link = document.createElement('a'); link.className = 'staff-notification-entry'; link.href = orderQueueUrl;
 
-        const title = document.createElement('strong'); title.textContent = `${item.order_number} · ${item.status}`;
+        const title = document.createElement('strong'); title.textContent = `${item.order_number} Ã‚Â· ${item.status}`;
 
-        const info = document.createElement('small'); info.textContent = `${item.customer} · ₱${Number(item.total).toFixed(2)} · ${item.created_at || 'Just now'}`;
+        const info = document.createElement('small'); info.textContent = `${item.customer} Ã‚Â· Ã¢â€šÂ±${Number(item.total).toFixed(2)} Ã‚Â· ${item.created_at || 'Just now'}`;
 
         link.append(title, info); link.addEventListener('click', () => { notificationDropdown.hidden = true; notificationButton.setAttribute('aria-expanded', 'false'); }); notificationList.append(link);
 

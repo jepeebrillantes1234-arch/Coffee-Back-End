@@ -5,6 +5,7 @@ use App\Http\Controllers\Staff\ProfileController;
 use App\Http\Controllers\Staff\PosController;
 use App\Http\Controllers\Staff\ProductController;
 use App\Http\Controllers\Staff\TransactionController;
+use App\Http\Controllers\Staff\RewardRedemptionController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
@@ -23,4 +24,6 @@ Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')-
     Route::get('/menu',[ProductController::class,'index'])->name('menu');
     Route::post('/menu/{product}/toggle',[ProductController::class,'toggle'])->name('menu.toggle');
     Route::get('/transactions',[TransactionController::class,'index'])->name('transactions');
+    Route::get('/rewards/verify',[RewardRedemptionController::class,'index'])->name('rewards.verify');
+    Route::post('/rewards/verify',[RewardRedemptionController::class,'claim'])->name('rewards.claim');
 });

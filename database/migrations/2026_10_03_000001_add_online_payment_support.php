@@ -8,7 +8,9 @@ return new class extends Migration {
     public function up(): void
     {
         // Bagong status: awaiting_payment (hindi pa bayad, hindi pa nakikita ng staff)
-        DB::statement("ALTER TABLE orders MODIFY status ENUM('awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered','completed','rejected','cancelled') NOT NULL DEFAULT 'pending'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE orders MODIFY status ENUM('awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered','completed','rejected','cancelled') NOT NULL DEFAULT 'pending'");
+        }
 
         Schema::table('payments', function (Blueprint $t) {
             $t->string('provider', 20)->nullable();
@@ -21,7 +23,9 @@ return new class extends Migration {
     public function down(): void
     {
         DB::table('orders')->where('status', 'awaiting_payment')->update(['status' => 'cancelled']);
-        DB::statement("ALTER TABLE orders MODIFY status ENUM('pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered','completed','rejected','cancelled') NOT NULL DEFAULT 'pending'");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE orders MODIFY status ENUM('pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered','completed','rejected','cancelled') NOT NULL DEFAULT 'pending'");
+        }
 
         Schema::table('payments', function (Blueprint $t) {
             $t->dropColumn(['provider', 'provider_session_id', 'provider_payment_id', 'checkout_url']);

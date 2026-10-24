@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'google' => ['client_id' => env('GOOGLE_WEB_CLIENT_ID')],
+    'google' => ['client_id' => env('GOOGLE_WEB_CLIENT_ID'), 'maps_geocoding_key' => env('GOOGLE_MAPS_API_KEY')],
     'firebase' => [
         'project_id' => env('FIREBASE_PROJECT_ID', 'kjm-coffee-shop'),
         'credentials' => env('FIREBASE_CREDENTIALS'),

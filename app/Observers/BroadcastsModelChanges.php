@@ -2,6 +2,7 @@
 namespace App\Observers;
 use App\Events\LiveUpdate;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 trait BroadcastsModelChanges
 {
     protected function announce(Model $model, string $kind, ?int $userId = null): void
@@ -14,12 +15,12 @@ trait BroadcastsModelChanges
             $meta['payment_status'] = $model->payment_status;
         }
 
-        // A WebSocket outage must not turn a successfully saved order into an API error.
-        // The staff page also reconciles its order fragment automatically as a fallback.
-        try {
-            LiveUpdate::dispatch($kind, $model->getKey(), $userId, $meta);
-        } catch (\Throwable $exception) {
-            // The record is committed; skip this broadcast and let the client fallback catch up.
-        }
+        DB::afterCommit(function () use ($kind, $model, $userId, $meta): void {
+            try {
+                LiveUpdate::dispatch($kind, $model->getKey(), $userId, $meta);
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        });
     }
 }

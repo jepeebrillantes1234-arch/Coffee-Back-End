@@ -18,8 +18,8 @@ HTML);
 };
 
 // Pahina kung saan ibabalik ng PayMongo ang customer
-Route::get('/pay/return', fn () => $page('✅', 'Salamat!', 'Natanggap namin ang bayad mo. Bumalik sa Coffee Shop app para makita ang status ng order mo.'));
-Route::get('/pay/cancel', fn () => $page('↩️', 'Hindi natuloy ang bayad', 'Bumalik sa Coffee Shop app. Puwede mong subukan ulit magbayad sa loob ng ilang minuto.'));
+Route::get('/pay/return', fn () => $page('âœ…', 'Salamat!', 'Natanggap namin ang bayad mo. Bumalik sa Coffee Shop app para makita ang status ng order mo.'));
+Route::get('/pay/cancel', fn () => $page('â†©ï¸', 'Hindi natuloy ang bayad', 'Bumalik sa Coffee Shop app. Puwede mong subukan ulit magbayad sa loob ng ilang minuto.'));
 
 // ============ PEKENG GCASH (para sa pagsubok lang) ============
 $simAllowed = fn () => config('paymongo.mode') === 'simulated' && !app()->isProduction();
@@ -42,12 +42,12 @@ h1{font-size:20px;margin:0 0 4px;color:#0b5fff}.amt{font-size:34px;font-weight:8
 button{width:100%;padding:14px;border:0;border-radius:12px;font-size:16px;font-weight:600;margin-top:10px;cursor:pointer}
 .pay{background:#0b5fff;color:#fff}.fail{background:#f1f1f1;color:#333}</style></head>
 <body><div class="c">
-<div class="tag">⚠️ SIMULATED na GCash ito. Hindi ito totoong bayad. Para sa pagsubok lang.</div>
+<div class="tag">âš ï¸ SIMULATED na GCash ito. Hindi ito totoong bayad. Para sa pagsubok lang.</div>
 <h1>GCash (Test)</h1>
 <div>Order {$o->order_number}</div>
-<div class="amt">₱{$amount}</div>{$status}
-<form method="POST" action="/pay/simulate/{$session}/pay"><input type="hidden" name="_token" value="{$token}"><button class="pay">✅ Bayaran</button></form>
-<form method="POST" action="/pay/simulate/{$session}/fail"><input type="hidden" name="_token" value="{$token}"><button class="fail">✖ Ipa-fail ang bayad</button></form>
+<div class="amt">â‚±{$amount}</div>{$status}
+<form method="POST" action="/pay/simulate/{$session}/pay"><input type="hidden" name="_token" value="{$token}"><button class="pay">âœ… Bayaran</button></form>
+<form method="POST" action="/pay/simulate/{$session}/fail"><input type="hidden" name="_token" value="{$token}"><button class="fail">âœ– Ipa-fail ang bayad</button></form>
 </div></body></html>
 HTML);
 });
@@ -62,3 +62,23 @@ Route::post('/pay/simulate/{session}/{action}', function (Request $request, stri
     }
     return redirect('/pay/cancel');
 })->where('action', 'pay|fail');
+
+// Simulated membership payment is available only in non-production test mode.
+Route::get('/pay/simulate-membership/{session}', function (string $session) use ($simAllowed) {
+    abort_unless($simAllowed(), 404);
+    $payment = \App\Models\MembershipPayment::where('provider', 'simulated')->where('provider_session_id', $session)->firstOrFail();
+    $membership = $payment->membership()->with('user')->firstOrFail();
+    $amount = number_format((float) $payment->amount, 2);
+    $token = csrf_token();
+    $status = $payment->status === 'paid' ? '<p style="color:#198754"><b>Membership payment confirmed.</b></p>' : '';
+    return response("<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><title>Membership payment</title><style>body{font-family:system-ui;background:#f5ebdd;padding:24px}.card{max-width:420px;margin:auto;background:white;border-radius:18px;padding:28px}button{width:100%;padding:14px;margin-top:12px;border:0;border-radius:10px}</style></head><body><div class=card><h1>KJM Membership</h1><p>Customer: ".e($membership->user->name)."</p><h2>₱{$amount}</h2>{$status}<form method=POST action='/pay/simulate-membership/".e($session)."/pay'><input type=hidden name=_token value='".e($token)."'><button>Confirm simulated payment</button></form><form method=POST action='/pay/simulate-membership/".e($session)."/fail'><input type=hidden name=_token value='".e($token)."'><button>Simulate failed payment</button></form></div></body></html>");
+});
+Route::post('/pay/simulate-membership/{session}/{action}', function (Request $request, string $session, string $action) use ($simAllowed) {
+    abort_unless($simAllowed(), 404);
+    $payment = \App\Models\MembershipPayment::where('provider', 'simulated')->where('provider_session_id', $session)->firstOrFail();
+    if ($action === 'pay') app(\App\Services\LoyaltyService::class)->markPaid($payment, 'sim_mem_pay_' . \Illuminate\Support\Str::random(12), 10000);
+    else $payment->update(['status' => 'failed']);
+    return redirect($action === 'pay' ? '/pay/membership/return' : '/pay/membership/cancel');
+})->where('action', 'pay|fail');
+Route::get('/pay/membership/return', fn () => $page('✅', 'Membership payment received', 'Return to KJM Coffee Shop to refresh your membership card.'));
+Route::get('/pay/membership/cancel', fn () => $page('↩️', 'Payment not completed', 'Your membership is still pending. You can try again in the app.'));

@@ -46,6 +46,16 @@
         @error('image') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
     </div>
 
+    <fieldset class="rounded-xl border border-espresso/15 p-4 space-y-3">
+        <legend class="px-1 font-semibold">Scheduled product discount</legend>
+        <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="discount_is_active" value="1" @checked(old('discount_is_active', $product->discount_is_active))> Enable discount</label>
+        <div class="flex flex-wrap gap-3">
+            <select name="discount_type" class="rounded-lg border border-espresso/20 px-3 py-2"><option value="percent" @selected(old('discount_type',$product->discount_type)==='percent')>Percent</option><option value="fixed" @selected(old('discount_type',$product->discount_type)==='fixed')>Fixed amount</option></select>
+            <input type="number" name="discount_value" min="0" step="0.01" value="{{ old('discount_value',$product->discount_value) }}" placeholder="Discount value" class="w-40 rounded-lg border border-espresso/20 px-3 py-2">
+        </div>
+        <div class="flex flex-wrap gap-3"><label class="text-xs">Starts <input type="datetime-local" name="discount_starts_at" value="{{ old('discount_starts_at', $product->discount_starts_at?->format('Y-m-d\\TH:i')) }}" class="block rounded border p-2"></label><label class="text-xs">Ends <input type="datetime-local" name="discount_ends_at" value="{{ old('discount_ends_at', $product->discount_ends_at?->format('Y-m-d\\TH:i')) }}" class="block rounded border p-2"></label></div>
+    </fieldset>
+
     <label class="flex items-center gap-2 text-sm">
         <input type="checkbox" name="is_available" value="1" @checked(old('is_available', $product->is_available))> Available (uncheck if out of stock)
     </label>

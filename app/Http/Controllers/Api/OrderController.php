@@ -37,7 +37,7 @@ class OrderController extends Controller
     {
         $data=$this->validateCheckout($request,true);
         $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'qrph':'cod'):(config('shop.payment','cod')==='online'?'qrph':'cash'));
-        if($method==='qrph' && config('shop.payment','cod')!=='online') return $this->fail('Online payment is currently unavailable.');
+        if($method==='qrph' && (config('shop.payment','cod')!=='online' || !(bool)((int)Settings::get('payment_qrph_enabled',1)))) return $this->fail('QRPh payment is currently unavailable.');
         if($method==='qrph' && config('paymongo.mode')!=='simulated' && !filled(config('paymongo.secret'))) return $this->fail('Online payment is not configured yet. Please choose Cash on Delivery or contact the shop.',503);
         if($data['order_type']==='delivery' && $method==='cash') return $this->fail('COD o QRPh lang ang puwedeng bayad para sa delivery.');
         if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
@@ -51,7 +51,9 @@ class OrderController extends Controller
                 'delivery_lng'=>$data['delivery_lng']??null,'notes'=>$data['notes']??null]);
             foreach($quote['lines'] as $line){
                 $item=$o->items()->create(['product_id'=>$line['product']->id,'product_name'=>$line['product']->name,
-                    'quantity'=>$line['quantity'],'unit_price'=>$line['unit_price'],'total_price'=>$line['total'],'notes'=>$line['notes']]);
+                    'quantity'=>$line['quantity'],'unit_price'=>$line['unit_price'],'total_price'=>$line['total'],'notes'=>$line['notes'],
+                    'home_promo_id'=>$line['home_promo_id']??null,'home_promo_name'=>$line['home_promo_name']??null,
+                    'original_unit_price'=>$line['original_unit_price']??$line['unit_price']]);
                 foreach($line['options'] as $option) $item->options()->create(['option_name'=>$option->name,'extra_price'=>$option->extra_price]);
             }
             DB::table('order_status_logs')->insert(['order_id'=>$o->id,'status'=>$o->status,'changed_by'=>$request->user()->id,'created_at'=>now()]);
@@ -99,6 +101,7 @@ class OrderController extends Controller
     {
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
         if($o->payment_method!=='qrph') return $this->fail('COD ang bayad sa order na ito.');
+        if (!(bool)((int)Settings::get('payment_qrph_enabled',1))) return $this->fail('QRPh payment is currently unavailable.');
         $checkout=app(PaymentGateway::class)->createCheckout($o);
         return $this->ok(array_merge($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])), ['checkout_url'=>$checkout['url']]));
     }
@@ -140,7 +143,8 @@ class OrderController extends Controller
 
     private function validateCheckout(Request $r,bool $forOrder):array
     {
-        return $r->validate(['items'=>'required|array|min:1|max:50','items.*.product_id'=>'required|integer|exists:products,id',
+        return $r->validate(['items'=>'nullable|array|max:50','items.*.product_id'=>'required|integer|exists:products,id',
+            'home_promos'=>'nullable|array|max:20','home_promos.*.home_promo_id'=>'required|integer|exists:home_promos,id','home_promos.*.quantity'=>'required|integer|min:1|max:20',
             'items.*.quantity'=>'required|integer|min:1|max:50','items.*.option_ids'=>'nullable|array','items.*.option_ids.*'=>'integer',
             'items.*.notes'=>'nullable|string|max:255','order_type'=>($forOrder?'required':'nullable').'|in:delivery,pickup',
             'payment_method'=>'nullable|in:cod,cash,qrph','promo_code'=>'nullable|string|max:30',
@@ -151,7 +155,7 @@ class OrderController extends Controller
     private function quote(User $user,array $data):array
     {
         $lines=[];$subtotal=0.0;
-        foreach($data['items'] as $input){
+        foreach(($data['items']??[]) as $input){
             $product=Product::with(['optionGroups.options'=>fn($q)=>$q->where('is_available',true)])
                 ->where('is_available',true)->findOrFail($input['product_id']);
             $ids=array_values(array_unique(array_map('intval',$input['option_ids']??[])));
@@ -162,9 +166,18 @@ class OrderController extends Controller
                 if($group->is_required && $count===0) throw ValidationException::withMessages(['items'=>"Pumili ng option para sa {$product->name} ({$group->name})."]);
                 if(!$group->is_multiple && $count>1 || $group->is_multiple && $count>(int)$group->max_select) throw ValidationException::withMessages(['items'=>"Sobra ang napiling option para sa {$group->name}."]);
             }
-            $unit=(float)$product->base_price+(float)$options->sum('extra_price');$qty=(int)$input['quantity'];$total=round($unit*$qty,2);$subtotal+=$total;
-            $lines[]=['product'=>$product,'options'=>$options,'quantity'=>$qty,'unit_price'=>$unit,'total'=>$total,'notes'=>$input['notes']??null];
+            $unit=(float)$product->sale_price+(float)$options->sum('extra_price');$qty=(int)$input['quantity'];$total=round($unit*$qty,2);$subtotal+=$total;
+            $lines[]=['product'=>$product,'options'=>$options,'quantity'=>$qty,'unit_price'=>$unit,'original_unit_price'=>(float)$product->base_price+(float)$options->sum('extra_price'),'total'=>$total,'notes'=>$input['notes']??null,'home_promo_id'=>null,'home_promo_name'=>null];
         }
+        foreach(($data['home_promos']??[]) as $bundleInput){
+            $promo=HomePromo::live()->with('products')->findOrFail((int)$bundleInput['home_promo_id']);
+            $count=(int)$bundleInput['quantity'];$original=0.0;
+            foreach($promo->products as $product){if(!$product->is_available)throw ValidationException::withMessages(['home_promos'=>'A product in this bundle is no longer available.']);$original+=(float)$product->base_price*(int)$product->pivot->quantity;}
+            if($original<=0 || $promo->products->isEmpty() || (float)$promo->price >= $original)throw ValidationException::withMessages(['home_promos'=>'This bundle is no longer available at its current price.']);
+            $bundleTotal=round((float)$promo->price*$count,2);$allocated=0.0;$products=$promo->products->values();
+            foreach($products as $index=>$product){$qty=(int)$product->pivot->quantity*$count;$share=$index===$products->count()-1?round($bundleTotal-$allocated,2):round($bundleTotal*((float)$product->base_price*(int)$product->pivot->quantity/$original)*$count,2);$allocated+=$share;$unit=round($share/max(1,$qty),2);$subtotal+=$share;$lines[]=['product'=>$product,'options'=>collect(),'quantity'=>$qty,'unit_price'=>$unit,'original_unit_price'=>(float)$product->base_price,'total'=>$share,'notes'=>null,'home_promo_id'=>$promo->id,'home_promo_name'=>$promo->name];}
+        }
+        if(!$lines)throw ValidationException::withMessages(['items'=>'Add at least one product or bundle.']);
         $subtotal=round($subtotal,2);$isFirst=!Order::where('user_id',$user->id)->exists();$firstDiscount=0.0;
         if($isFirst && (bool)((int)Settings::get('first_order_enabled',1))){$firstDiscount=min($subtotal*(float)Settings::get('first_order_percent',15)/100,(float)Settings::get('first_order_max',100));}
         $promo=null;$promoDiscount=0.0;
@@ -176,7 +189,7 @@ class OrderController extends Controller
             if($promo->usages()->where('user_id',$user->id)->count()>=(int)$promo->per_user_limit) throw ValidationException::withMessages(['promo_code'=>'Nagamit mo na ang limit ng promo na ito.']);
             if($promo->type==='percent') $promoDiscount=$subtotal*(float)$promo->value/100;
             elseif($promo->type==='fixed') $promoDiscount=(float)$promo->value;
-            else { $eligible=collect($lines)->first(fn($line)=>$line['product']->id===$promo->product_id);if($eligible){$sets=intdiv($eligible['quantity'],(int)$promo->buy_qty+(int)$promo->free_qty);$promoDiscount=$sets*(int)$promo->free_qty*(float)$eligible['product']->base_price;} }
+            else { $eligible=collect($lines)->first(fn($line)=>$line['product']->id===$promo->product_id);if($eligible){$sets=intdiv($eligible['quantity'],(int)$promo->buy_qty+(int)$promo->free_qty);$promoDiscount=$sets*(int)$promo->free_qty*(float)$eligible['product']->sale_price;} }
             if($promo->max_discount) $promoDiscount=min($promoDiscount,(float)$promo->max_discount);
             $promoDiscount=min($promoDiscount,$subtotal);
         }
@@ -205,7 +218,8 @@ class OrderController extends Controller
             'delivery_lat'=>$o->delivery_lat,'delivery_lng'=>$o->delivery_lng,'notes'=>$o->notes,'reject_reason'=>$o->reject_reason,
             'created_at'=>$o->created_at?->toIso8601String(),'checkout_url'=>$payment?->checkout_url,
             'payment_expires_at'=>$o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
-            'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment',
+            'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment'
+                && (bool)((int)Settings::get('payment_qrph_enabled',1)),
             'can_cancel'=>$o->canCancel(),'has_review'=>$o->review!==null,
 'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'image_url'=>$i->product?->image_url,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
     }

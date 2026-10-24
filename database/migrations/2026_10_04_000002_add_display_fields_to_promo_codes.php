@@ -8,7 +8,9 @@ return new class extends Migration {
     public function up(): void
     {
         // Bagong uri: bogo = Buy X Get Y
-        DB::statement("ALTER TABLE promo_codes MODIFY type ENUM('percent','fixed','bogo') NOT NULL");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE promo_codes MODIFY type ENUM('percent','fixed','bogo') NOT NULL");
+        }
 
         Schema::table('promo_codes', function (Blueprint $t) {
             $t->string('title', 60)->nullable()->after('code');   // maliit na text sa taas
@@ -30,6 +32,8 @@ return new class extends Migration {
             $t->dropColumn(['title', 'headline', 'description', 'image', 'product_id', 'buy_qty', 'free_qty', 'show_in_app', 'sort_order']);
         });
         DB::table('promo_codes')->where('type', 'bogo')->update(['type' => 'fixed']);
-        DB::statement("ALTER TABLE promo_codes MODIFY type ENUM('percent','fixed') NOT NULL");
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE promo_codes MODIFY type ENUM('percent','fixed') NOT NULL");
+        }
     }
 };
