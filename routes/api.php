@@ -65,6 +65,8 @@ Route::prefix('v1')->group(function () {
             Route::get('rewards', [LoyaltyController::class, 'rewards']);
             Route::post('rewards/{reward}/redeem', [LoyaltyController::class, 'redeem'])->middleware('throttle:10,1');
             Route::get('rewards/redemptions', [LoyaltyController::class, 'redemptions']);
+            Route::post('rewards/{reward}/delivery-quote', [LoyaltyController::class, 'deliveryQuote'])->middleware('throttle:20,1');
+            Route::post('rewards/redemptions/{redemption}/cancel', [LoyaltyController::class, 'cancelRedemption'])->middleware('throttle:10,1');
             Route::get('location/reverse-geocode', ReverseGeocodeController::class)->middleware('throttle:30,1');
             Route::get('addresses',         [AddressController::class, 'index']);
             Route::post('addresses',        [AddressController::class, 'store']);

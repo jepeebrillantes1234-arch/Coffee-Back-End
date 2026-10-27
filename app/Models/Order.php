@@ -18,6 +18,7 @@ class Order extends Model
     public function delivery() { return $this->hasOne(Delivery::class); }
     public function payments() { return $this->hasMany(Payment::class); }
     public function review()   { return $this->hasOne(Review::class); }
+    public function rewardRedemption() { return $this->hasOne(RewardRedemption::class); }
 
     public function canCancel(): bool { return in_array($this->status, self::CANCELLABLE, true); }
 }

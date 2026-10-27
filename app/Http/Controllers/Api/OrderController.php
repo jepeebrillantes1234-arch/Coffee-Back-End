@@ -117,8 +117,12 @@ class OrderController extends Controller
     {
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
         if(!$o->canCancel()) return $this->fail('Hindi na maaaring kanselahin ang order.',409);
-        $o->update(['status'=>'cancelled','reject_reason'=>'Kinansela ng customer']);
-        $this->log($o,$request->user()->id);Notifier::order($o,'cancelled');
+        DB::transaction(function () use ($o, $request) {
+            $o->update(['status'=>'cancelled','reject_reason'=>'Kinansela ng customer']);
+            app(\App\Services\LoyaltyService::class)->restoreForOrder($o);
+            $this->log($o,$request->user()->id);
+        });
+        Notifier::order($o,'cancelled');
         return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
     }
 

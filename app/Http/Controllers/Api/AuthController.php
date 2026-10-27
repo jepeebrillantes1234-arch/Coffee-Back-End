@@ -193,6 +193,8 @@ class AuthController extends Controller
         $data = $request->validate([
             'name'                  => 'sometimes|string|max:100',
             'phone'                 => 'sometimes|nullable|string|max:20|unique:users,phone,' . $user->id,
+            'bio'                   => 'sometimes|nullable|string|max:500',
+            'preferred_language'    => 'sometimes|in:en,fil',
             'current_password'      => 'required_with:password|string',
             'password'              => 'sometimes|string|min:8|confirmed',
             'avatar'                => 'sometimes|image|max:5120',
@@ -274,6 +276,8 @@ class AuthController extends Controller
             'username'   => $user->username,
             'email'      => $user->email,
             'phone'      => $user->phone,
+            'bio'        => $user->bio,
+            'preferred_language' => $user->preferred_language ?? 'en',
             'role'       => $user->role,
             'avatar'     => $user->avatar,
             'avatar_url' => $user->avatar ? '/storage/' . ltrim($user->avatar, '/') : null,

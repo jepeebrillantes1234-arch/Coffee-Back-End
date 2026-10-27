@@ -5,22 +5,50 @@
 @php
     $in = 'w-full rounded-lg border border-espresso/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caramel';
     $v = fn ($k, $d = '') => old($k, $s[$k] ?? $d);
+    $frontCardPath = $s['membership_card_front_design'] ?? $s['membership_card_design'] ?? null;
+    $backCardPath = $s['membership_card_back_design'] ?? null;
+    // Same-origin paths avoid stale APP_URL values in local/ngrok admin sessions.
+    $frontCardUrl = $frontCardPath ? '/storage/' . ltrim($frontCardPath, '/') : null;
+    $backCardUrl = $backCardPath ? '/storage/' . ltrim($backCardPath, '/') : null;
 @endphp
-<form method="POST" action="{{ route('admin.settings.update') }}" class="space-y-6 max-w-2xl">
+<form method="POST" action="{{ route('admin.settings.update') }}" enctype="multipart/form-data" class="space-y-6 max-w-2xl">
     @csrf @method('PUT')
 
     <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-        <p class="font-semibold">ðŸŽ First Order Discount</p>
+        <p class="font-semibold">First Order Discount</p>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="first_order_enabled" value="1" @checked($v('first_order_enabled', '1') == '1')> Enabled</label>
         <div class="grid sm:grid-cols-2 gap-4">
             <div><label class="block text-sm mb-1">Discount (%)</label><input type="number" step="0.01" name="first_order_percent" value="{{ $v('first_order_percent', 15) }}" class="{{ $in }}"></div>
-            <div><label class="block text-sm mb-1">Maximum discount (â‚±)</label><input type="number" step="0.01" name="first_order_max" value="{{ $v('first_order_max', 100) }}" class="{{ $in }}"></div>
+            <div><label class="block text-sm mb-1">Maximum discount (PHP)</label><input type="number" step="0.01" name="first_order_max" value="{{ $v('first_order_max', 100) }}" class="{{ $in }}"></div>
         </div>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="allow_promo_stacking" value="1" @checked($v('allow_promo_stacking', '0') == '1')> Allow promo codes to stack with first order discount</label>
     </div>
 
+    <div class="bg-white rounded-2xl shadow-sm p-6 space-y-6">
+        <div>
+            <p class="font-semibold">Membership Card Design</p>
+            <p class="text-sm text-espresso/60">Upload the front and back artwork. Leave space at the lower left for the member's name, ID, points, and status, and on the right for the real QR code. Use the back for benefits or redemption instructions.</p>
+        </div>
+        @foreach ([['front', 'Front Design', $frontCardUrl], ['back', 'Back Design', $backCardUrl]] as [$side, $label, $imageUrl])
+            <section class="space-y-2">
+                <h3 class="font-medium">{{ $label }}</h3>
+                <div class="w-full max-w-lg aspect-[1832/858] overflow-hidden rounded-xl border border-espresso/20 bg-cream/50 flex items-center justify-center">
+                    <img id="membership-card-{{ $side }}-preview" @if ($imageUrl) src="{{ $imageUrl }}" @endif alt="{{ $label }} preview" class="{{ $imageUrl ? '' : 'hidden' }} w-full h-full object-cover">
+                    <p id="membership-card-{{ $side }}-fallback" class="{{ $imageUrl ? 'hidden' : '' }} px-4 text-center text-sm text-espresso/60">No {{ strtolower($label) }} uploaded. The app's built-in card design will be used.</p>
+                </div>
+                <label class="block text-sm">Upload or replace {{ strtolower($label) }} (JPG, PNG, WebP; up to 8 MB)
+                    <input type="file" name="membership_card_{{ $side }}_image" accept="image/jpeg,image/png,image/webp" class="mt-1 block w-full text-sm">
+                </label>
+            </section>
+        @endforeach
+        <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="membership_card_design_active" value="1" @checked(old('membership_card_design_active', $s['membership_card_design_active'] ?? '0') == '1')>
+            Use these designs in the customer app
+        </label>
+    </div>
+
     <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-        <p class="font-semibold">ðŸ“ Shop Location</p>
+        <p class="font-semibold">Shop Location</p>
         <div class="grid sm:grid-cols-2 gap-4">
             <div><label class="block text-sm mb-1">Latitude</label><input name="shop_lat" value="{{ $v('shop_lat') }}" class="{{ $in }}"></div>
             <div><label class="block text-sm mb-1">Longitude</label><input name="shop_lng" value="{{ $v('shop_lng') }}" class="{{ $in }}"></div>
@@ -29,10 +57,10 @@
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
-        <p class="font-semibold">ðŸ›µ Delivery</p>
+        <p class="font-semibold">Delivery</p>
         <div class="grid sm:grid-cols-3 gap-4">
-            <div><label class="block text-sm mb-1">Base fee (â‚±)</label><input type="number" step="0.01" name="delivery_base_fee" value="{{ $v('delivery_base_fee', 30) }}" class="{{ $in }}"></div>
-            <div><label class="block text-sm mb-1">Per km (â‚±)</label><input type="number" step="0.01" name="delivery_fee_per_km" value="{{ $v('delivery_fee_per_km', 10) }}" class="{{ $in }}"></div>
+            <div><label class="block text-sm mb-1">Base fee (PHP)</label><input type="number" step="0.01" name="delivery_base_fee" value="{{ $v('delivery_base_fee', 30) }}" class="{{ $in }}"></div>
+            <div><label class="block text-sm mb-1">Per km (PHP)</label><input type="number" step="0.01" name="delivery_fee_per_km" value="{{ $v('delivery_fee_per_km', 10) }}" class="{{ $in }}"></div>
             <div><label class="block text-sm mb-1">Radius (km)</label><input type="number" step="0.1" name="delivery_radius_km" value="{{ $v('delivery_radius_km', 8) }}" class="{{ $in }}"></div>
         </div>
         <div class="w-48"><label class="block text-sm mb-1">Auto-cancel if unconfirmed (minutes)</label><input type="number" name="auto_cancel_minutes" value="{{ $v('auto_cancel_minutes', 10) }}" class="{{ $in }}"></div>
@@ -48,7 +76,7 @@
             <div><label class="block text-sm mb-1">Phone number</label><input name="support_phone" type="tel" value="{{ $v('support_phone') }}" class="{{ $in }}"></div>
             <div><label class="block text-sm mb-1">Support email</label><input name="support_email" type="email" value="{{ $v('support_email') }}" class="{{ $in }}"></div>
             <div><label class="block text-sm mb-1">WhatsApp number</label><input name="support_whatsapp" type="tel" value="{{ $v('support_whatsapp') }}" class="{{ $in }}"></div>
-            <div class="sm:col-span-2"><label class="block text-sm mb-1">Support hours</label><input name="support_hours" value="{{ $v('support_hours') }}" placeholder="Example: Monday–Saturday, 8:00 AM–6:00 PM" class="{{ $in }}"></div>
+            <div class="sm:col-span-2"><label class="block text-sm mb-1">Support hours</label><input name="support_hours" value="{{ $v('support_hours') }}" placeholder="Example: Monday-Saturday, 8:00 AM-6:00 PM" class="{{ $in }}"></div>
         </div>
     </div>
     @if ($errors->any())
@@ -56,4 +84,31 @@
     @endif
     <button class="bg-espresso text-cream px-6 py-2.5 rounded-lg font-medium">Save Settings</button>
 </form>
+<script>
+    for (const side of ['front', 'back']) {
+        const input = document.querySelector(`input[name="membership_card_${side}_image"]`);
+        const preview = document.getElementById(`membership-card-${side}-preview`);
+        const fallback = document.getElementById(`membership-card-${side}-fallback`);
+        let objectUrl;
+
+        const showFallback = () => {
+            preview?.classList.add('hidden');
+            fallback?.classList.remove('hidden');
+        };
+        const showPreview = () => {
+            fallback?.classList.add('hidden');
+            preview?.classList.remove('hidden');
+        };
+        preview?.addEventListener('error', showFallback);
+        preview?.addEventListener('load', showPreview);
+        input?.addEventListener('change', () => {
+            const file = input.files?.[0];
+            if (!file || !preview) return;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+            objectUrl = URL.createObjectURL(file);
+            preview.src = objectUrl;
+            showPreview();
+        });
+    }
+</script>
 @endsection

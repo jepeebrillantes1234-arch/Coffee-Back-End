@@ -47,9 +47,15 @@ class LoyaltyController extends Controller
 
     public function redeem(Request $request, Reward $reward, LoyaltyService $loyalty)
     {
-        $data = $request->validate(['idempotency_key' => 'nullable|string|min:16|max:64']);
+        $data = $request->validate([
+            'idempotency_key' => 'required|string|min:16|max:64',
+            'fulfillment_type' => 'nullable|in:delivery,pickup',
+            'address_id' => 'required_if:fulfillment_type,delivery|nullable|integer',
+        ]);
         try {
-            $redemption = $loyalty->redeem($request->user(), $reward, $data['idempotency_key'] ?? null);
+            $redemption = $loyalty->redeem($request->user(), $reward, $data['idempotency_key'], $data['fulfillment_type'] ?? 'pickup', isset($data['address_id']) ? (int) $data['address_id'] : null);
+            $redemption->order_number = $redemption->order?->order_number;
+            $redemption->order_status = $redemption->order?->status;
             return response()->json(['success' => true, 'message' => 'Reward redeemed', 'data' => $redemption, 'errors' => null], 201);
         } catch (RuntimeException $e) {
             return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => null, 'errors' => null], 422);
@@ -58,8 +64,29 @@ class LoyaltyController extends Controller
 
     public function redemptions(Request $request)
     {
-        $rows = RewardRedemption::with('reward:id,name,image')
-            ->where('user_id', $request->user()->id)->latest('id')->limit(100)->get();
+        $rows = RewardRedemption::with(['reward:id,name,image', 'order:id,order_number,status,delivery_fee'])
+            ->where('user_id', $request->user()->id)->latest('id')->limit(100)->get()
+            ->each(function ($row) { $row->order_number = $row->order?->order_number; $row->order_status = $row->order?->status; });
         return response()->json(['success' => true, 'message' => 'OK', 'data' => $rows, 'errors' => null]);
+    }
+
+    public function deliveryQuote(Request $request, Reward $reward, LoyaltyService $loyalty)
+    {
+        $data = $request->validate(['address_id' => 'required|integer']);
+        try {
+            return response()->json(['success' => true, 'message' => 'OK', 'data' => $loyalty->deliveryQuote($request->user(), $reward, (int) $data['address_id']), 'errors' => null]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => null, 'errors' => null], 422);
+        }
+    }
+
+    public function cancelRedemption(Request $request, RewardRedemption $redemption, LoyaltyService $loyalty)
+    {
+        try {
+            $row = $loyalty->cancelRedemption($request->user(), $redemption);
+            return response()->json(['success' => true, 'message' => 'Redemption cancelled', 'data' => $row, 'errors' => null]);
+        } catch (RuntimeException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage(), 'data' => null, 'errors' => null], 409);
+        }
     }
 }

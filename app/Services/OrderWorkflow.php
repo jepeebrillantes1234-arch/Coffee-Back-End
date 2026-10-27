@@ -105,6 +105,9 @@ class OrderWorkflow
     {
         $o->status=$status; $o->save();
         DB::table('order_status_logs')->insert(['order_id'=>$o->id,'status'=>$status,'changed_by'=>auth()->id(),'created_at'=>now()]);
+        if (in_array($status, ['cancelled', 'rejected'], true)) {
+            app(LoyaltyService::class)->restoreForOrder($o);
+        }
         Notifier::order($o,$status); return null;
     }
 }

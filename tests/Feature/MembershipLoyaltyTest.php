@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\LoyaltyTransaction;
 use App\Models\Membership;
+use App\Models\Address;
 use App\Models\MembershipPayment;
 use App\Models\Order;
 use App\Models\Product;
@@ -15,6 +16,9 @@ use App\Services\LoyaltyService;
 use App\Services\PaymentGateway;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
+use App\Support\Settings;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -266,6 +270,107 @@ class MembershipLoyaltyTest extends TestCase
         $this->assertSame(0, (int) $membership->fresh()->points_balance);
         $this->assertDatabaseCount('reward_redemptions', 1);
         $this->assertSame(1, LoyaltyTransaction::where('type', 'redeemed')->count());
+    }
+
+    public function test_product_redemption_creates_separate_cod_delivery_fee_and_restores_points_once_on_cancel(): void
+    {
+        Settings::set('shop_lat', '15.950571');
+        Settings::set('shop_lng', '120.538425');
+        Settings::set('delivery_base_fee', '30');
+        Settings::set('delivery_fee_per_km', '10');
+        Settings::set('delivery_radius_km', '8');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active', 80);
+        $product = $this->product();
+        $reward = Reward::create([
+            'name' => 'Redeemable Latte', 'reward_type' => 'free_product', 'product_id' => $product->id,
+            'points_cost' => 30, 'stock' => 2, 'is_active' => true,
+        ]);
+        $address = Address::create([
+            'user_id' => $customer->id, 'label' => 'Home', 'full_address' => 'Labit Proper, Urdaneta City',
+            'latitude' => 15.950571, 'longitude' => 120.538425,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')->postJson("/api/v1/rewards/{$reward->id}/delivery-quote", ['address_id' => $address->id])
+            ->assertOk()->assertJsonPath('data.delivery_fee', 30);
+        $created = $this->postJson("/api/v1/rewards/{$reward->id}/redeem", [
+            'idempotency_key' => 'delivery-redemption-order-key', 'fulfillment_type' => 'delivery', 'address_id' => $address->id,
+        ])->assertCreated()->assertJsonPath('data.delivery_fee', '30.00');
+
+        $orderId = (int) $created->json('data.order_id');
+        $this->assertDatabaseHas('orders', [
+            'id' => $orderId, 'order_type' => 'delivery', 'subtotal' => 0, 'total' => 30,
+            'delivery_fee' => 30, 'payment_method' => 'cod', 'payment_status' => 'unpaid',
+        ]);
+        $this->assertDatabaseHas('order_items', ['order_id' => $orderId, 'quantity' => 1, 'unit_price' => 0, 'total_price' => 0]);
+        $this->assertDatabaseHas('payments', ['order_id' => $orderId, 'method' => 'cod', 'amount' => 30, 'status' => 'pending']);
+        $this->assertSame(50, (int) $membership->fresh()->points_balance);
+
+        $redemptionId = (int) $created->json('data.id');
+        $this->postJson("/api/v1/rewards/redemptions/{$redemptionId}/cancel")->assertOk();
+        $this->assertSame(80, (int) $membership->fresh()->points_balance);
+        $this->assertSame(2, (int) $reward->fresh()->stock);
+        $this->postJson("/api/v1/rewards/redemptions/{$redemptionId}/cancel")->assertStatus(409);
+        $this->assertSame(80, (int) $membership->fresh()->points_balance);
+        $this->assertSame(1, LoyaltyTransaction::where('redemption_id', $redemptionId)->where('type', 'adjustment')->count());
+    }
+
+    public function test_admin_can_upload_and_activate_front_and_back_card_artwork_for_the_customer_app(): void
+    {
+        Storage::fake('public');
+        $admin = $this->user('admin');
+        $this->actingAs($admin)->get('/admin/settings')->assertOk()
+            ->assertSee('Front Design')->assertSee('Back Design')
+            ->assertSee('No front design uploaded')->assertSee('URL.createObjectURL');
+        $this->put('/admin/settings', [
+            'first_order_percent' => 15, 'first_order_max' => 100,
+            'shop_lat' => 15.95, 'shop_lng' => 120.53,
+            'delivery_base_fee' => 30, 'delivery_fee_per_km' => 10,
+            'delivery_radius_km' => 8, 'auto_cancel_minutes' => 10,
+            'membership_card_design_active' => 1,
+            'membership_card_front_image' => UploadedFile::fake()->createWithContent(
+                'member-card-front.png',
+                base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n7sAAAAASUVORK5CYII='),
+            ),
+            'membership_card_back_image' => UploadedFile::fake()->createWithContent(
+                'member-card-back.png',
+                base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n7sAAAAASUVORK5CYII='),
+            ),
+        ])->assertRedirect();
+
+        $frontPath = Settings::get('membership_card_front_design');
+        $backPath = Settings::get('membership_card_back_design');
+        $this->assertNotEmpty($frontPath);
+        $this->assertNotEmpty($backPath);
+        $this->assertSame($frontPath, Settings::get('membership_card_design'));
+        Storage::disk('public')->assertExists($frontPath);
+        Storage::disk('public')->assertExists($backPath);
+        $customer = $this->user('customer');
+        $this->actingAs($customer, 'sanctum')->getJson('/api/v1/loyalty')
+            ->assertOk()
+            ->assertJsonPath('data.card_design_url', Storage::disk('public')->url($frontPath))
+            ->assertJsonPath('data.card_design_front_url', Storage::disk('public')->url($frontPath))
+            ->assertJsonPath('data.card_design_back_url', Storage::disk('public')->url($backPath));
+
+        $this->actingAs($admin)->put('/admin/settings', [
+            'first_order_percent' => 15, 'first_order_max' => 100,
+            'shop_lat' => 15.95, 'shop_lng' => 120.53,
+            'delivery_base_fee' => 30, 'delivery_fee_per_km' => 10,
+            'delivery_radius_km' => 8, 'auto_cancel_minutes' => 10,
+            'membership_card_design_active' => 1,
+            'membership_card_front_image' => UploadedFile::fake()->createWithContent(
+                'member-card-front-replacement.png',
+                base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/n7sAAAAASUVORK5CYII='),
+            ),
+        ])->assertRedirect();
+        $replacementFrontPath = Settings::get('membership_card_front_design');
+        $this->assertNotSame($frontPath, $replacementFrontPath);
+        Storage::disk('public')->assertMissing($frontPath);
+        Storage::disk('public')->assertExists($replacementFrontPath);
+        $this->assertSame($backPath, Settings::get('membership_card_back_design'));
+
+        $this->actingAs($admin)->get('/admin/settings')->assertOk()
+            ->assertSee('/storage/' . $replacementFrontPath)->assertSee('/storage/' . $backPath);
     }
     public function test_customer_staff_and_admin_permissions_and_admin_pages(): void
     {

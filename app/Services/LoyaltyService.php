@@ -3,14 +3,20 @@ namespace App\Services;
 
 use App\Models\Membership;
 use App\Models\MembershipPayment;
+use App\Models\Address;
 use App\Models\Order;
+use App\Models\Payment;
+use App\Models\Product;
 use App\Models\Reward;
 use App\Models\RewardRedemption;
 use App\Models\LoyaltyTransaction;
 use App\Models\User;
 use App\Support\Notifier;
+use App\Support\Settings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
+use App\Support\Geo;
 use Illuminate\Support\Str;
 use RuntimeException;
 
@@ -138,6 +144,7 @@ class LoyaltyService
     public function awardForOrder(Order $order): int
     {
         if (!in_array($order->status, ['delivered', 'completed'], true) || $order->payment_status !== 'paid' || !$order->user_id) return 0;
+        if (RewardRedemption::where('order_id', $order->id)->exists()) return 0;
         $qty = (int) $order->items()->sum('quantity');
         if ($qty < 1) return 0;
         $earned = false;
@@ -163,6 +170,10 @@ class LoyaltyService
     public function customerSummary(User $user): array
     {
         $membership = Membership::where('user_id', $user->id)->with(['payments' => fn ($q) => $q->latest('id')])->first();
+        $cardDesignActive = Settings::get('membership_card_design_active', '0') === '1';
+        $frontCardPath = Settings::get('membership_card_front_design')
+            ?: Settings::get('membership_card_design');
+        $backCardPath = Settings::get('membership_card_back_design');
         $transactions = $membership ? $membership->transactions()->with('order:id,order_number')->latest('id')->limit(100)->get()->map(fn ($tx) => [
             'id' => $tx->id, 'type' => $tx->type, 'points' => (int) $tx->points,
             'description' => $tx->description, 'order_number' => $tx->order?->order_number,
@@ -180,12 +191,42 @@ class LoyaltyService
             ] : null,
             'monthly_points' => (int) $monthly,
             'transactions' => $transactions,
+            // Preserve the original key for older app versions.
+            'card_design_url' => $cardDesignActive && filled($frontCardPath)
+                ? Storage::disk('public')->url($frontCardPath) : null,
+            'card_design_front_url' => $cardDesignActive && filled($frontCardPath)
+                ? Storage::disk('public')->url($frontCardPath) : null,
+            'card_design_back_url' => $cardDesignActive && filled($backCardPath)
+                ? Storage::disk('public')->url($backCardPath) : null,
         ];
     }
 
-    public function redeem(User $user, Reward $reward, ?string $idempotencyKey): RewardRedemption
+    public function deliveryQuote(User $user, Reward $reward, int $addressId): array
     {
-        return DB::transaction(function () use ($user, $reward, $idempotencyKey) {
+        $membership = Membership::where('user_id', $user->id)->first();
+        if (!$membership || !$membership->isActive()) throw new RuntimeException('An active membership is required to redeem points.');
+        if (!$reward->isAvailable() || $reward->reward_type !== 'free_product') throw new RuntimeException('This product reward is unavailable.');
+        if ($membership->points_balance < $reward->points_cost) throw new RuntimeException('You do not have enough points for this reward.');
+        $product = Product::whereKey($reward->product_id)->where('is_available', true)->first();
+        if (!$product) throw new RuntimeException('This product is currently unavailable.');
+        $address = Address::where('id', $addressId)->where('user_id', $user->id)->firstOrFail();
+        return $this->quoteDelivery($address);
+    }
+
+    private function quoteDelivery(Address $address): array
+    {
+        $shopLat = Settings::get('shop_lat'); $shopLng = Settings::get('shop_lng');
+        if (!is_numeric($shopLat) || !is_numeric($shopLng) || !is_numeric($address->latitude) || !is_numeric($address->longitude)) {
+            throw new RuntimeException('Delivery location is missing valid coordinates.');
+        }
+        $distance = Geo::km((float) $shopLat, (float) $shopLng, (float) $address->latitude, (float) $address->longitude);
+        if ($distance > (float) Settings::get('delivery_radius_km', 8)) throw new RuntimeException('This address is outside the delivery area.');
+        return ['delivery_fee' => round((float) Settings::get('delivery_base_fee', 30) + $distance * (float) Settings::get('delivery_fee_per_km', 10), 2), 'distance_km' => round($distance, 2)];
+    }
+
+    public function redeem(User $user, Reward $reward, ?string $idempotencyKey, string $fulfillmentType = 'pickup', ?int $addressId = null): RewardRedemption
+    {
+        return DB::transaction(function () use ($user, $reward, $idempotencyKey, $fulfillmentType, $addressId) {
             $membership = Membership::where('user_id', $user->id)->lockForUpdate()->first();
             if (!$membership || !$membership->isActive()) throw new RuntimeException('An active membership is required to redeem rewards.');
             if ($idempotencyKey) {
@@ -198,6 +239,19 @@ class LoyaltyService
             $lockedReward = Reward::whereKey($reward->id)->lockForUpdate()->firstOrFail();
             if (!$lockedReward->isAvailable()) throw new RuntimeException('This reward is currently unavailable.');
             if ($membership->points_balance < $lockedReward->points_cost) throw new RuntimeException('You do not have enough points for this reward.');
+            if ($lockedReward->reward_type === 'free_product') {
+                if (!in_array($fulfillmentType, ['delivery', 'pickup'], true)) throw new RuntimeException('Choose delivery or store pickup.');
+                $product = Product::whereKey($lockedReward->product_id)->lockForUpdate()->first();
+                if (!$product || !$product->is_available) throw new RuntimeException('This product is currently unavailable.');
+                $address = null; $deliveryFee = 0; $order = null;
+                if ($fulfillmentType === 'delivery') {
+                    if (!$addressId) throw new RuntimeException('Choose a saved delivery address.');
+                    $address = Address::where('id', $addressId)->where('user_id', $user->id)->firstOrFail();
+                    $deliveryFee = $this->quoteDelivery($address)['delivery_fee'];
+                }
+            } else {
+                $fulfillmentType = 'pickup'; $deliveryFee = 0; $product = null; $address = null; $order = null;
+            }
             $redemption = RewardRedemption::create([
                 'user_id' => $user->id, 'membership_id' => $membership->id, 'reward_id' => $lockedReward->id,
                 'reward_name' => $lockedReward->name, 'points_spent' => $lockedReward->points_cost,
@@ -206,7 +260,31 @@ class LoyaltyService
                 'discount_amount' => $lockedReward->discount_amount,
                 'code' => 'KJMR-' . Str::upper(Str::random(16)), 'idempotency_key' => $idempotencyKey,
                 'status' => 'pending', 'expires_at' => $lockedReward->expires_at,
+                'fulfillment_type' => $fulfillmentType, 'delivery_fee' => $deliveryFee,
             ]);
+            if ($product) {
+                $order = Order::create([
+                    'order_number' => 'KJM-' . now()->format('ymd') . '-' . Str::upper(Str::random(6)),
+                    'user_id' => $user->id, 'order_type' => $fulfillmentType,
+                    'status' => 'pending', 'subtotal' => 0, 'discount' => 0,
+                    'delivery_fee' => $deliveryFee, 'total' => $deliveryFee,
+                    'payment_method' => $fulfillmentType === 'delivery' ? 'cod' : 'cash',
+                    'payment_status' => 'unpaid',
+                    'delivery_address' => $address?->full_address,
+                    'delivery_lat' => $address?->latitude, 'delivery_lng' => $address?->longitude,
+                    'notes' => 'Points redemption ' . $redemption->code . ($fulfillmentType === 'pickup' ? ' - store pickup' : ''),
+                ]);
+                $order->items()->create([
+                    'product_id' => $product->id, 'product_name' => $product->name,
+                    'quantity' => 1, 'unit_price' => 0, 'total_price' => 0,
+                    'notes' => 'Redeemed with ' . $lockedReward->points_cost . ' points',
+                ]);
+                DB::table('order_status_logs')->insert(['order_id' => $order->id, 'status' => 'pending', 'changed_by' => $user->id, 'created_at' => now()]);
+                if ($fulfillmentType === 'delivery' && $deliveryFee > 0) {
+                    Payment::create(['order_id' => $order->id, 'method' => 'cod', 'amount' => $deliveryFee, 'status' => 'pending']);
+                }
+                $redemption->update(['order_id' => $order->id]);
+            }
             $membership->decrement('points_balance', $lockedReward->points_cost);
             LoyaltyTransaction::create([
                 'membership_id' => $membership->id, 'user_id' => $user->id, 'redemption_id' => $redemption->id,
@@ -214,7 +292,57 @@ class LoyaltyService
                 'description' => "Redeemed {$lockedReward->name} ({$redemption->code})",
             ]);
             if ($lockedReward->stock !== null) $lockedReward->decrement('stock');
-            return $redemption->load('reward');
+            if ($order) Notifier::order($order, 'pending');
+            return $redemption->load(['reward', 'order']);
+        });
+    }
+
+    public function restoreForOrder(Order $order): bool
+    {
+        return DB::transaction(function () use ($order) {
+            $redemption = RewardRedemption::where('order_id', $order->id)->lockForUpdate()->first();
+            if (!$redemption || $redemption->status !== 'pending') return false;
+            $membership = Membership::whereKey($redemption->membership_id)->lockForUpdate()->first();
+            if (!$membership) return false;
+            $redemption->update(['status' => 'cancelled']);
+            $membership->increment('points_balance', $redemption->points_spent);
+            if ($redemption->reward_id) {
+                $reward = Reward::whereKey($redemption->reward_id)->lockForUpdate()->first();
+                if ($reward && $reward->stock !== null) $reward->increment('stock');
+            }
+            LoyaltyTransaction::create([
+                'membership_id' => $membership->id, 'user_id' => $membership->user_id,
+                'redemption_id' => $redemption->id, 'type' => 'adjustment',
+                'points' => $redemption->points_spent,
+                'description' => "Points restored for cancelled redemption {$redemption->code}",
+            ]);
+            return true;
+        });
+    }
+
+    public function cancelRedemption(User $user, RewardRedemption $redemption): RewardRedemption
+    {
+        return DB::transaction(function () use ($user, $redemption) {
+            $locked = RewardRedemption::whereKey($redemption->id)->where('user_id', $user->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'pending') throw new RuntimeException('This redemption can no longer be cancelled.');
+            if ($locked->order_id) {
+                $order = Order::whereKey($locked->order_id)->lockForUpdate()->firstOrFail();
+                if (!$order->canCancel()) throw new RuntimeException('This order can no longer be cancelled.');
+                $order->update(['status' => 'cancelled', 'reject_reason' => 'Customer cancelled points redemption']);
+                DB::table('order_status_logs')->insert(['order_id' => $order->id, 'status' => 'cancelled', 'changed_by' => $user->id, 'created_at' => now()]);
+                $this->restoreForOrder($order);
+                Notifier::order($order, 'cancelled');
+            } else {
+                $membership = Membership::whereKey($locked->membership_id)->lockForUpdate()->firstOrFail();
+                $locked->update(['status' => 'cancelled']);
+                $membership->increment('points_balance', $locked->points_spent);
+                LoyaltyTransaction::create(['membership_id' => $membership->id, 'user_id' => $user->id, 'redemption_id' => $locked->id, 'type' => 'adjustment', 'points' => $locked->points_spent, 'description' => "Points restored for cancelled redemption {$locked->code}"]);
+                if ($locked->reward_id) {
+                    $reward = Reward::whereKey($locked->reward_id)->lockForUpdate()->first();
+                    if ($reward && $reward->stock !== null) $reward->increment('stock');
+                }
+            }
+            return $locked->fresh(['order', 'reward']);
         });
     }
 

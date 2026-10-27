@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Support\Activity;
 use App\Support\Settings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class SettingsController extends Controller
 {
@@ -29,14 +30,48 @@ class SettingsController extends Controller
             'support_email' => 'nullable|email|max:255',
             'support_whatsapp' => 'nullable|string|max:40',
             'support_hours' => 'nullable|string|max:160',
+            'membership_card_front_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:8192',
+            'membership_card_back_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:8192',
+            // Keep existing admin forms/automation working; the legacy upload is the front.
+            'membership_card_design_image' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:8192',
         ]);
         $data['first_order_enabled']  = $request->boolean('first_order_enabled') ? '1' : '0';
         $data['allow_promo_stacking'] = $request->boolean('allow_promo_stacking') ? '1' : '0';
 
-        foreach ($data as $k => $v) Settings::set($k, $v);
-        Activity::log('update', 'settings', 'Ni-update ang First Order Discount / Delivery settings');
+        $frontUpload = $request->file('membership_card_front_image')
+            ?? $request->file('membership_card_design_image');
+        $backUpload = $request->file('membership_card_back_image');
+        unset(
+            $data['membership_card_front_image'],
+            $data['membership_card_back_image'],
+            $data['membership_card_design_image']
+        );
+        foreach ($data as $key => $value) Settings::set($key, $value);
 
-        return back()->with('success', 'Na-save ang settings.');
+        $previousFront = Settings::get('membership_card_front_design')
+            ?: Settings::get('membership_card_design');
+        $previousBack = Settings::get('membership_card_back_design');
+        $frontPath = $frontUpload?->store('membership-cards', 'public') ?: $previousFront;
+        $backPath = $backUpload?->store('membership-cards', 'public') ?: $previousBack;
+
+        if ($frontPath) {
+            Settings::set('membership_card_front_design', $frontPath);
+            // Backwards-compatible field used by earlier app builds.
+            Settings::set('membership_card_design', $frontPath);
+        }
+        if ($backPath) Settings::set('membership_card_back_design', $backPath);
+
+        $active = $request->boolean('membership_card_design_active') && filled($frontPath);
+        Settings::set('membership_card_design_active', $active ? '1' : '0');
+
+        if ($frontUpload && $previousFront && $previousFront !== $frontPath) {
+            Storage::disk('public')->delete($previousFront);
+        }
+        if ($backUpload && $previousBack && $previousBack !== $backPath) {
+            Storage::disk('public')->delete($previousBack);
+        }
+
+        Activity::log('update', 'settings', 'Updated first order, delivery, and membership card settings');
+        return back()->with('success', 'Settings saved.');
     }
 }
-
