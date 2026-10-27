@@ -12,14 +12,21 @@
             @endif
             <div>
                 <h1 class="text-2xl font-semibold">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</h1>
-                <p class="text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact supplied' }} · {{ ucfirst(str_replace('_', ' ', $conversation->status)) }}</p>
+                <p class="text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact supplied' }} · {{ ucfirst(str_replace('_', ' ', $conversation->status)) }}@if($conversation->user?->role) · {{ ucfirst($conversation->user->role) }}@endif</p>
             </div>
         </div>
     </div>
     <div class="flex items-center gap-2">
-        @if($conversation->status !== 'closed')
-            <form method="POST" action="{{ route('admin.support.close', $conversation) }}">@csrf<button class="rounded-lg border px-3 py-2 text-sm">Close conversation</button></form>
-        @endif
+        <form method="POST" action="{{ route('admin.support.status', $conversation) }}" class="flex flex-wrap items-center gap-2">
+            @csrf
+            <label class="sr-only" for="ticket-status">Ticket status</label>
+            <select id="ticket-status" name="status" class="rounded-lg border border-espresso/15 px-3 py-2 text-sm">
+                @foreach(['open' => 'Open', 'waiting_admin' => 'Waiting for admin', 'closed' => 'Closed'] as $value => $label)
+                    <option value="{{ $value }}" @selected($conversation->status === $value)>{{ $label }}</option>
+                @endforeach
+            </select>
+            <button class="rounded-lg border px-3 py-2 text-sm">Update status</button>
+        </form>
         <form method="POST" action="{{ route('admin.support.destroy', $conversation) }}" onsubmit="return confirm('Permanently delete this conversation and its uploaded attachments?')">
             @csrf @method('DELETE')
             <button type="submit" class="rounded-lg border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">Delete conversation</button>
@@ -32,16 +39,16 @@
             @include('admin.support._messages', ['conversation' => $conversation])
         </div>
         @if($conversation->status !== 'closed')
-            <form method="POST" action="{{ route('admin.support.reply', $conversation) }}" class="mt-3 flex gap-2 border-t pt-3">
+            <form method="POST" action="{{ route('admin.support.reply', $conversation) }}" class="mt-3 flex flex-col gap-2 border-t pt-3 sm:flex-row">
                 @csrf
-                <textarea name="body" rows="2" required maxlength="3000" placeholder="Write a reply to the customer..." class="min-w-0 flex-1 rounded-lg border px-3 py-2"></textarea>
+                <textarea name="body" rows="2" required maxlength="3000" placeholder="Write a reply..." class="min-w-0 flex-1 rounded-lg border px-3 py-2"></textarea>
                 <button class="self-end rounded-lg bg-espresso px-4 py-2 text-white">Send</button>
             </form>
         @endif
     </section>
     <aside class="space-y-4">
         <section class="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 class="font-semibold">Customer profile</h2>
+            <h2 class="font-semibold">{{ $conversation->user?->role === 'staff' ? 'Staff profile' : 'Customer profile' }}</h2>
             <div class="mt-3 flex items-center gap-3">
                 @if($conversation->user?->avatar)
                     <img src="{{ asset('storage/' . ltrim($conversation->user->avatar, '/')) }}" alt="Customer profile photo" class="h-16 w-16 rounded-full object-cover ring-2 ring-amber-100">
@@ -50,12 +57,12 @@
                 @endif
                 <div class="min-w-0">
                     <p class="break-words text-sm font-semibold">{{ $conversation->user->name ?? $conversation->guest_name ?? 'Guest customer' }}</p>
-                    <p class="break-all text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact' }}</p>
+                <p class="text-sm text-espresso/60">{{ $conversation->user->email ?? $conversation->guest_contact ?? 'No contact supplied' }} · {{ ucfirst(str_replace('_', ' ', $conversation->status)) }}@if($conversation->user?->role) · {{ ucfirst($conversation->user->role) }}@endif</p>
                 </div>
             </div>
             @if($conversation->user?->phone)<p class="mt-2 text-sm text-espresso/60">Phone: {{ $conversation->user->phone }}</p>@endif
         </section>
-        @if($conversation->user_id)
+        @if($conversation->user_id && $conversation->user?->role === 'customer')
         <section class="rounded-2xl bg-white p-4 shadow-sm">
             <h2 class="font-semibold">Order / Refund</h2>
             @if($conversation->refundOrder)

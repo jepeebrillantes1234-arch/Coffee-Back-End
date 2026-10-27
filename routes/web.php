@@ -57,6 +57,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('support/{conversation}/link-order', [SupportChatController::class, 'linkOrder'])->name('support.link-order');
     Route::post('support/{conversation}/refund', [SupportChatController::class, 'refund'])->name('support.refund');
     Route::post('support/{conversation}/close', [SupportChatController::class, 'close'])->name('support.close');
+    Route::post('support/{conversation}/status', [SupportChatController::class, 'updateStatus'])->name('support.status');
     Route::delete('support/{conversation}', [SupportChatController::class, 'destroy'])->name('support.destroy');
     Route::get('support/{conversation}/attachments/{message}', [SupportChatController::class, 'attachment'])->name('support.attachment');
 

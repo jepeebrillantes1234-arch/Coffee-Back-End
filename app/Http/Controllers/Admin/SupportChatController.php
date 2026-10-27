@@ -16,7 +16,7 @@ class SupportChatController extends Controller
 {
     public function index()
     {
-        $conversations = SupportConversation::with(['user:id,name,email,phone', 'messages' => fn ($q) => $q->latest('id')->limit(1)])
+        $conversations = SupportConversation::with(['user:id,name,email,phone,role', 'messages' => fn ($q) => $q->latest('id')->limit(1)])
             ->latest('last_message_at')->paginate(20);
         return view('admin.support.index', compact('conversations'));
     }
@@ -24,7 +24,7 @@ class SupportChatController extends Controller
 
     public function pollInbox(Request $request)
     {
-        $conversations = SupportConversation::with(['user:id,name,email,phone', 'messages' => fn ($q) => $q->latest('id')->limit(1)])
+        $conversations = SupportConversation::with(['user:id,name,email,phone,role', 'messages' => fn ($q) => $q->latest('id')->limit(1)])
             ->latest('last_message_at')->paginate(20)->withQueryString();
 
         return response()->json([
@@ -35,11 +35,11 @@ class SupportChatController extends Controller
     public function notifications()
     {
         $unanswered = SupportConversation::query()
-            ->whereRaw('(select max(id) from support_messages where conversation_id = support_conversations.id and sender_type = ?) > coalesce((select max(id) from support_messages where conversation_id = support_conversations.id and sender_type = ?), 0)', ['customer', 'admin']);
+            ->whereRaw('(select max(id) from support_messages where conversation_id = support_conversations.id and sender_type in (?, ?)) > coalesce((select max(id) from support_messages where conversation_id = support_conversations.id and sender_type = ?), 0)', ['customer', 'staff', 'admin']);
 
         $count = (clone $unanswered)->count();
         $latest = (clone $unanswered)
-            ->with(['user:id,name', 'messages' => fn ($q) => $q->where('sender_type', 'customer')->latest('id')->limit(1)])
+            ->with(['user:id,name,role', 'messages' => fn ($q) => $q->whereIn('sender_type', ['customer', 'staff'])->latest('id')->limit(1)])
             ->latest('last_message_at')->first();
         $message = $latest?->messages->first();
 
@@ -150,6 +150,17 @@ class SupportChatController extends Controller
     {
         $conversation->update(['status' => 'closed', 'last_message_at' => now()]);
         return redirect()->route('admin.support.index')->with('success', 'Conversation closed.');
+    }
+
+    public function updateStatus(Request $request, SupportConversation $conversation)
+    {
+        $data = $request->validate([
+            'status' => 'required|in:open,waiting_admin,closed',
+        ]);
+        $conversation->update(['status' => $data['status'], 'last_message_at' => now()]);
+        Activity::log('status', 'support_chat', 'Admin updated a support conversation status');
+
+        return back()->with('success', 'Support ticket status updated.');
     }
 
     public function attachment(SupportConversation $conversation, SupportMessage $message)

@@ -39,7 +39,7 @@
                     <span class="px-1">&middot;</span>&#8369;{{ number_format($order->total, 2) }}
                 </p>
                 <p class="mt-1 text-sm text-espresso/80">
-                    {{ $order->items->map(fn ($item) => $item->quantity . ' &times; ' . $item->product_name)->join(', ') }}
+                    {{ $order->items->map(fn ($item) => $item->quantity . ' x ' . $item->product_name)->join(', ') }}
                 </p>
                 @if($order->delivery?->rider)
                     <p class="mt-2 text-sm font-medium text-emerald-700">

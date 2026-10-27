@@ -6,12 +6,19 @@ use App\Http\Controllers\Staff\PosController;
 use App\Http\Controllers\Staff\ProductController;
 use App\Http\Controllers\Staff\TransactionController;
 use App\Http\Controllers\Staff\RewardRedemptionController;
+use App\Http\Controllers\Staff\SupportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
     Route::get('/',fn()=>redirect()->route('staff.orders'))->name('home');
     Route::get('/orders',[OrderController::class,'index'])->name('orders');
+    Route::get('/profile',[ProfileController::class,'edit'])->name('profile.edit');
+    Route::put('/profile',[ProfileController::class,'update'])->name('profile.update');
+    Route::put('/profile/password',[ProfileController::class,'updatePassword'])->name('profile.password');
     Route::post('/profile/avatar',[ProfileController::class,'updateAvatar'])->name('profile.avatar');
+    Route::get('/support',[SupportController::class,'index'])->name('support');
+    Route::post('/support',[SupportController::class,'send'])->name('support.send')->middleware('throttle:20,1');
+    Route::get('/support/{conversation}/poll',[SupportController::class,'poll'])->name('support.poll');
     Route::get('/orders/partial',[OrderController::class,'partial'])->name('orders.partial');
     Route::get('/orders/count',[OrderController::class,'count'])->name('orders.count');
     Route::get('/orders/alerts',[OrderController::class,'alerts'])->name('orders.alerts');

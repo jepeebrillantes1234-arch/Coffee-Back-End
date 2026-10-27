@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 
-<html lang="tl">
+<html lang="en">
 
 <head>
 
@@ -88,7 +88,9 @@
 
   body.staff-shell[data-staff-theme=dark] main :is(table,th,td,hr){border-color:#463b35!important}body.staff-shell[data-staff-theme=dark] main thead{background:#302721;color:#e8dfd7}
 
-  .staff-profile-panel{width:min(430px,96vw);padding:22px;background:#fffaf5}
+  .staff-profile-panel{box-sizing:border-box;width:min(430px,100vw);max-height:100dvh;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;padding:clamp(16px,4vw,22px);background:#fffaf5}
+  .staff-settings-row{min-width:0}.staff-settings-row>span:nth-child(2){min-width:0}.staff-settings-row strong,.staff-settings-row small{overflow-wrap:anywhere;line-height:1.35}.staff-settings-row>b{flex:0 0 auto;margin-left:4px}.staff-settings-icon svg{width:20px;height:20px;display:block}.staff-panel-head>div{min-width:0}.staff-panel-head .staff-panel-label{line-height:1.4}
+  @media(max-width:480px){.staff-profile-panel{padding:16px}.staff-panel-person{gap:12px;padding:14px}.staff-profile-details{padding-left:18px}.staff-theme-row{padding-left:14px}.staff-help-copy{padding-left:18px}.staff-panel-avatar{width:62px;height:62px;flex-basis:62px}}
 
   .staff-panel-head{margin-bottom:18px}.staff-panel-head strong{font-size:19px;color:#38221b}
 
@@ -163,14 +165,10 @@
 
     <a class="staff-brand" href="{{ route('staff.orders') }}"><img src="{{ asset('logo1.png') }}" alt="KJM Coffee Shop logo"><span><strong>Staff Panel</strong><small>Coffee Shop</small></span></a>
 
-    <nav class="staff-nav"><small>Operations</small>
-
+        <nav class="staff-nav"><small>Operations</small>
         @foreach ($tabs as [$route, $label, $pattern])
-
-            <a href="{{ route($route) }}" class="{{ request()->is($pattern) ? 'active' : '' }}"><span>{{ $route === 'staff.rewards.verify' ? '★' : ($route === 'staff.orders' ? '▤' : ($route === 'staff.pos' ? '▣' : ($route === 'staff.menu' ? '♜' : '◷'))) }}</span>{{ $label }}@if($route === 'staff.orders')<span id="nav-pending" class="staff-nav-count {{ $pending ? '' : 'hidden' }}">{{ $pending }}</span>@endif</a>
-
+            <a href="{{ route($route) }}" class="{{ request()->is($pattern) ? 'active' : '' }}"><span class="staff-nav-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">@if($route === 'staff.orders')<path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h4M9 12h7M9 16h7"/>@elseif($route === 'staff.pos')<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2m4 0h2m-8 4h2m4 0h2"/>@elseif($route === 'staff.menu')<path d="M4 19h16M6 16h12l-2-9H8zM9 5h6"/>@elseif($route === 'staff.rewards.verify')<path d="M12 3v4m0 10v4m9-9h-4M7 12H3"/><circle cx="12" cy="12" r="4"/>@else<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>@endif</svg></span>{{ $label }}@if($route === 'staff.orders')<span id="nav-pending" class="staff-nav-count {{ $pending ? '' : 'hidden' }}">{{ $pending }}</span>@endif</a>
         @endforeach
-
     </nav>
 
 </aside>
@@ -181,9 +179,9 @@
 
     <div class="px-5 py-3 flex flex-wrap items-center gap-4">
 
-        <button type="button" id="staffMenuButton" class="staff-menu-button" aria-label="Open navigation">Ã¢ËœÂ°</button>
+        <button type="button" id="staffMenuButton" class="staff-menu-button" aria-label="Open navigation"><svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
 
-        <label class="staff-search"><span>Ã¢Å’â€¢</span><input id="staffSearch" type="search" placeholder="Search order number, customer name..."></label>
+        <label class="staff-search"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 4.5 4.5"/></svg><input id="staffSearch" type="search" placeholder="Search order number, customer name..."></label>
 
         <span class="staff-head-spacer"></span>
 
@@ -201,7 +199,7 @@
 
         <button type="button" id="staffProfileButton" class="staff-profile-trigger" aria-label="View staff profile and settings" title="View profile and settings"><span class="staff-head-avatar">@if(auth()->user()->avatar)<img src="{{ asset('storage/' . ltrim(auth()->user()->avatar, '/')) }}" alt="Staff profile photo">@else{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}@endif</span><span class="staff-head-copy"><strong>{{ auth()->user()->name }}</strong><small class="block text-xs text-gray-500">View profile</small></span><span></span></button>
 
-        <span class="font-semibold text-lg">Ã¢Ëœâ€¢ Staff Panel</span>
+        <span class="font-semibold text-lg">Staff Panel</span>
 
         <nav class="flex gap-1">
 
@@ -268,86 +266,23 @@
 <div class="staff-profile-shade" id="staffProfileShade"></div>
 
 <aside class="staff-profile-panel" id="staffProfilePanel" aria-label="Staff settings">
-
     <div class="staff-panel-head">
-
         <div><strong>Staff Settings</strong><div class="staff-panel-label">Manage your profile and account settings.</div></div>
-
-        <button class="staff-panel-close" id="staffProfileClose" type="button" aria-label="Close">Ãƒâ€”</button>
-
+        <button class="staff-panel-close" id="staffProfileClose" type="button" aria-label="Close"><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
     </div>
 
-
-
     <section class="staff-panel-person">
-
         <div class="staff-panel-avatar">@if(auth()->user()->avatar)<img src="{{ asset('storage/' . ltrim(auth()->user()->avatar, '/')) }}" alt="Staff profile photo">@else{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}@endif</div>
-
-        <div><strong class="block text-lg">{{ auth()->user()->name }}</strong><div class="staff-panel-label">{{ ucfirst(auth()->user()->role) }}</div>
-
-            <span class="staff-active-badge"><i></i>{{ ucfirst(auth()->user()->status ?? 'active') }}</span>
-
-        </div>
-
+        <div><strong class="block text-lg">{{ auth()->user()->name }}</strong><div class="staff-panel-label">{{ ucfirst(auth()->user()->role) }}</div><span class="staff-active-badge"><i></i>{{ ucfirst(auth()->user()->status ?? 'active') }}</span></div>
     </section>
 
+    <a class="staff-panel-card staff-settings-card staff-settings-row" href="{{ route('staff.profile.edit') }}"><span class="staff-settings-icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span><strong>Profile Information</strong><small>Edit your name, email, phone, and photo</small></span><b aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></b></a>
 
-
-    <details class="staff-panel-card staff-details-card">
-
-        <summary class="staff-settings-row"><span class="staff-settings-icon">Ã¢â„¢â„¢</span><span><strong>Profile Information</strong><small>Edit or review your account details</small></span><b>Ã¢â‚¬Âº</b></summary>
-
-        <div class="staff-profile-details"><div class="staff-panel-label">Full Name</div><div class="staff-panel-value">{{ auth()->user()->name }}</div>
-
-            <div class="staff-panel-label">Email Address</div><div class="staff-panel-value">{{ auth()->user()->email }}</div>
-
-            @if(auth()->user()->phone)<div class="staff-panel-label">Phone Number</div><div class="staff-panel-value">{{ auth()->user()->phone }}</div>@endif
-
-            <div class="staff-panel-label">Role</div><div class="staff-panel-value">{{ ucfirst(auth()->user()->role) }}</div>
-
-        </div>
-
-        <form method="POST" action="{{ route('staff.profile.avatar') }}" enctype="multipart/form-data" class="staff-avatar-upload">
-            @csrf
-            <label for="staff-avatar-file">Profile photo <span>(JPG, PNG, or WebP; max 2 MB)</span></label>
-            <input id="staff-avatar-file" type="file" name="avatar" accept="image/jpeg,image/png,image/webp" required>
-            @error('avatar')<p class="staff-avatar-error">{{ $message }}</p>@enderror
-            <button type="submit">Upload photo</button>
-        </form>
-    </details>
-
-
-
-    <section class="staff-panel-card staff-settings-card">
-
-        <a class="staff-settings-row" href="{{ url('/forgot-password') }}"><span class="staff-settings-icon">Ã¢â„¢â„¢</span><span><strong>Change Password</strong><small>Update your password</small></span><b>Ã¢â‚¬Âº</b></a>
-
-    </section>
-
-    <section class="staff-panel-card staff-settings-card">
-
-        <button class="staff-settings-row" id="staffNotificationSettings" type="button"><span class="staff-settings-icon">Ã¢â„¢Å¸</span><span><strong>Notification Settings</strong><small id="staffNotificationState">Manage order and system notifications</small></span><b>Ã¢â‚¬Âº</b></button>
-
-    </section>
-
-    <section class="staff-panel-card staff-settings-card">
-
-        <div class="staff-settings-row staff-settings-heading"><span class="staff-settings-icon">Ã¢ËœÂ¼</span><span><strong>Appearance</strong><small>Light / Dark mode and theme settings</small></span></div>
-
-        <div class="staff-theme-row"><button type="button" data-theme-choice="light">Ã¢ËœÂ¼ &nbsp; Light</button><button type="button" data-theme-choice="dark">Ã¢ËœÂ¾ &nbsp; Dark</button></div>
-
-    </section>
-
-    <details class="staff-panel-card staff-details-card">
-
-        <summary class="staff-settings-row"><span class="staff-settings-icon">?</span><span><strong>Help &amp; Support</strong><small>Get help or contact support</small></span><b>Ã¢â‚¬Âº</b></summary>
-
-        <p class="staff-help-copy">For account access or order system issues, contact your system administrator.</p>
-
-    </details>
-
-    <form method="POST" action="{{ route('logout') }}" class="staff-logout-form">@csrf<button type="submit"><span>Ã¢â€¡Â¥</span> Log Out</button></form>
-
+    <section class="staff-panel-card staff-settings-card"><a class="staff-settings-row" href="{{ route('staff.profile.edit') }}#change-password"><span class="staff-settings-icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v3"/></svg></span><span><strong>Change Password</strong><small>Update your password</small></span><b aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></b></a></section>
+    <section class="staff-panel-card staff-settings-card"><button class="staff-settings-row" id="staffNotificationSettings" type="button"><span class="staff-settings-icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg></span><span><strong>Notification Settings</strong><small id="staffNotificationState">Manage order and system notifications</small></span><b aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></b></button></section>
+<section class="staff-panel-card staff-settings-card"><div class="staff-settings-row staff-settings-heading"><span class="staff-settings-icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z"/></svg></span><span><strong>Appearance</strong><small>Light / Dark mode and theme settings</small></span></div><div class="staff-theme-row"><button type="button" data-theme-choice="light"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span> Light</button><button type="button" data-theme-choice="dark"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/></svg></span> Dark</button></div></section>
+    <section class="staff-panel-card staff-settings-card"><a class="staff-settings-row" href="{{ route('staff.support') }}"><span class="staff-settings-icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.7c-1.1 1-1.9 1.3-1.9 2.8M12 17h.01"/></svg></span><span><strong>Help &amp; Support</strong><small>Send a message to the administrator</small></span><b aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg></b></a></section>
+    <form method="POST" action="{{ route('logout') }}" class="staff-logout-form">@csrf<button type="submit"><span aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg></span> Log Out</button></form>
 </aside>
 
 <script>
@@ -485,10 +420,8 @@
       } else items.forEach(item => {
 
         const link = document.createElement('a'); link.className = 'staff-notification-entry'; link.href = orderQueueUrl;
-
-        const title = document.createElement('strong'); title.textContent = `${item.order_number} Ã‚Â· ${item.status}`;
-
-        const info = document.createElement('small'); info.textContent = `${item.customer} Ã‚Â· Ã¢â€šÂ±${Number(item.total).toFixed(2)} Ã‚Â· ${item.created_at || 'Just now'}`;
+        const title = document.createElement('strong'); title.textContent = `${item.order_number} · ${item.status}`;
+        const info = document.createElement('small'); info.textContent = `${item.customer} · ₱${Number(item.total).toFixed(2)} · ${item.created_at || 'Just now'}`;
 
         link.append(title, info); link.addEventListener('click', () => { notificationDropdown.hidden = true; notificationButton.setAttribute('aria-expanded', 'false'); }); notificationList.append(link);
 

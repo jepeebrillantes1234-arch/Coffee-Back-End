@@ -59,7 +59,7 @@
 
     function updateLiveStatus(connected) {
         liveConnected = connected;
-        liveLabel.textContent = connected ? 'Live updates connected' : 'Live offline · auto-checking';
+        liveLabel.textContent = connected ? 'Live updates connected' : 'Live offline - auto-checking';
         liveDot.classList.toggle('bg-emerald-500', connected);
         liveDot.classList.toggle('bg-amber-500', !connected);
     }

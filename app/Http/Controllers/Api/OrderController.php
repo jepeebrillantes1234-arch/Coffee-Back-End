@@ -115,13 +115,22 @@ class OrderController extends Controller
 
     public function cancel(Request $request,int $id)
     {
+        $data = $request->validate(['reason' => 'required|string|max:255']);
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
-        if(!$o->canCancel()) return $this->fail('Hindi na maaaring kanselahin ang order.',409);
-        DB::transaction(function () use ($o, $request) {
-            $o->update(['status'=>'cancelled','reject_reason'=>'Kinansela ng customer']);
-            app(\App\Services\LoyaltyService::class)->restoreForOrder($o);
-            $this->log($o,$request->user()->id);
-        });
+        try {
+            DB::transaction(function () use ($o, $request, $data) {
+                $locked = Order::whereKey($o->id)->lockForUpdate()->firstOrFail();
+                if (!$locked->canCancel()) {
+                    throw new \DomainException('This order can no longer be cancelled because it has already progressed.');
+                }
+                $locked->update(['status'=>'cancelled','reject_reason'=>$data['reason']]);
+                app(\App\Services\LoyaltyService::class)->restoreForOrder($locked);
+                $this->log($locked,$request->user()->id);
+                $o->refresh();
+            });
+        } catch (\DomainException $error) {
+            return $this->fail($error->getMessage(),409);
+        }
         Notifier::order($o,'cancelled');
         return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
     }
