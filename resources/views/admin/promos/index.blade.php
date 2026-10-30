@@ -8,7 +8,7 @@
     <a href="{{ route('admin.promos.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium">+ New Promo</a>
 </div>
 <p class="mb-4"><a class="text-caramel font-medium" href="{{ route('admin.home-promos.index') }}">Manage Home Bundles &amp; Best Sellers →</a></p>
-<p class="text-sm text-espresso/60 mb-6">All promos with <b>"Show in app"</b> enabled will automatically appear on the Customer App Home screen as a sliding banner. You can add as many as you like.</p>
+<p class="text-sm text-espresso/60 mb-6">Active promos with <b>"Show in app"</b> enabled and a valid schedule appear in the Customer App Home carousel and Promotions page. The Home carousel shows at most five items total.</p>
 
 {{-- ========== FIRST ORDER DISCOUNT BANNER ========== --}}
 <div class="bg-white rounded-2xl shadow-sm p-6 mb-6">

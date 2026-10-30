@@ -48,7 +48,7 @@ class RiderController extends Controller
     public function accept(Request $r,int $id) { $d=$this->move($r,$id,'assigned','accepted','accepted_at');return $this->ok($this->resource($d)); }
     public function decline(Request $r,int $id)
     {
-        $d=Delivery::with('order')->where('rider_id',$r->user()->id)->where('status','assigned')->findOrFail($id);
+        $d=Delivery::with('order')->where('rider_id',$r->user()->id)->where('status','assigned')->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->findOrFail($id);
         DB::transaction(function()use($d,$r){$d->update(['status'=>'declined']);$d->order->update(['status'=>'ready']);$this->log($d->order,$r->user()->id,'ready');});
         return $this->ok($d->fresh());
     }
@@ -67,7 +67,7 @@ class RiderController extends Controller
     public function delivered(Request $r,int $id)
     {
         $data=$r->validate(['proof_photo'=>'required|image|max:8192','cash_collected'=>'nullable|numeric|min:0']);
-        $d=Delivery::with(['order.user','order.items.options'])->where('rider_id',$r->user()->id)->where('status','on_the_way')->findOrFail($id);$o=$d->order;
+        $d=Delivery::with(['order.user','order.items.options'])->where('rider_id',$r->user()->id)->where('status','on_the_way')->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->findOrFail($id);$o=$d->order;
         if($o->payment_method==='cod' && (float)($data['cash_collected']??0)<(float)$o->total) return $this->fail('Ilagay ang cash na natanggap; dapat katumbas o higit sa total.',422);
         DB::transaction(function()use($r,$data,$d,$o){
             $d->update(['status'=>'delivered','delivered_at'=>now(),'proof_photo'=>$r->file('proof_photo')->store('delivery-proofs','public'),'cash_collected_amount'=>$o->payment_method==='cod'?$o->total:null,'cash_collected_at'=>$o->payment_method==='cod'?now():null]);
@@ -101,11 +101,11 @@ class RiderController extends Controller
         $data=$r->validate(['delivery_id'=>'required|integer','latitude'=>'required|numeric|between:-90,90','longitude'=>'required|numeric|between:-180,180','speed'=>'nullable|numeric|min:0']);
         $d=Delivery::where('id',$data['delivery_id'])->where('rider_id',$r->user()->id)->whereIn('status',['accepted','picked_up','on_the_way'])->firstOrFail();
         DB::table('rider_locations')->insert(['delivery_id'=>$d->id,'rider_id'=>$r->user()->id,'latitude'=>$data['latitude'],'longitude'=>$data['longitude'],'speed'=>$data['speed']??null,'recorded_at'=>now()]);
-        $r->user()->riderProfile()->update(['current_lat'=>$data['latitude'],'current_lng'=>$data['longitude'],'last_location_at'=>now()]);try{\App\Events\LiveUpdate::dispatch('rider',(int)$r->user()->id);}catch(\Throwable $exception){report($exception);}return $this->ok(null,'Naitala ang lokasyon.');
+        $r->user()->riderProfile()->update(['current_lat'=>$data['latitude'],'current_lng'=>$data['longitude'],'last_location_at'=>now()]);try{$d->loadMissing('order');\App\Events\LiveUpdate::dispatch('rider',(int)$r->user()->id,$d->order?->user_id ? (int)$d->order->user_id : null);}catch(\Throwable $exception){report($exception);}return $this->ok(null,'Naitala ang lokasyon.');
     }
     private function move(Request $r,int $id,string $from,string $to,?string $timestamp=null):Delivery
     {
-        $d=Delivery::with('order')->where('rider_id',$r->user()->id)->where('status',$from)->findOrFail($id);$fields=['status'=>$to];if($timestamp)$fields[$timestamp]=now();$d->update($fields);
+        $d=Delivery::with('order')->where('rider_id',$r->user()->id)->where('status',$from)->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->findOrFail($id);$fields=['status'=>$to];if($timestamp)$fields[$timestamp]=now();$d->update($fields);
         if($to==='accepted'){$d->order->update(['status'=>'rider_assigned']);$this->log($d->order,$r->user()->id,'rider_assigned');}
         return $d->fresh();
     }

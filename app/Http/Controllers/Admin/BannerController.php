@@ -3,6 +3,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Banner;
+use App\Models\Product;
+use App\Models\PromoCode;
 use App\Support\Activity;
 use App\Support\Settings;
 use Carbon\Carbon;
@@ -19,7 +21,7 @@ class BannerController extends Controller
 
     public function create()
     {
-        return view('admin.banners.form', ['banner' => new Banner(['is_active' => true, 'audience' => 'all', 'banner_type' => 'order_now', 'destination' => 'menu', 'sort_order' => 0]), 'tokens' => $this->tokens()]);
+        return view('admin.banners.form', ['banner' => new Banner(['is_active' => true, 'audience' => 'all', 'banner_type' => 'order_now', 'destination' => 'menu', 'sort_order' => 0]), 'tokens' => $this->tokens(), 'products' => Product::orderBy('name')->get(['id', 'name']), 'promoCodes' => PromoCode::orderBy('code')->get(['id', 'code'])]);
     }
 
     public function store(Request $request)
@@ -34,7 +36,7 @@ class BannerController extends Controller
 
     public function edit(Banner $banner)
     {
-        return view('admin.banners.form', ['banner' => $banner, 'tokens' => $this->tokens()]);
+        return view('admin.banners.form', ['banner' => $banner, 'tokens' => $this->tokens(), 'products' => Product::orderBy('name')->get(['id', 'name']), 'promoCodes' => PromoCode::orderBy('code')->get(['id', 'code'])]);
     }
 
     public function update(Request $request, Banner $banner)
@@ -63,18 +65,27 @@ class BannerController extends Controller
 
     private function validated(Request $request): array
     {
-        $data = $request->validate([
+        $rules = [
             'title'      => 'nullable|string|max:60',
             'headline'   => 'required|string|max:40',
             'description' => 'nullable|string|max:1000',
+            'button_text' => 'nullable|string|max:30',
             'image'      => 'nullable|image|max:2048',
-            'banner_type' => 'required|in:order_now,promo,membership,redeem,rewards,custom',
-            'destination' => 'required|in:menu,promos,profile,cart,orders',
+            'banner_type' => 'required|in:order_now,promo,membership,redeem,rewards,custom,new_product,new_promo,promo_code,special_offer,announcement',
+            'destination' => 'required|in:menu,promos,profile,cart,orders,product,promo_code,offer,announcement',
             'audience'   => 'required|in:all,new_customers',
             'sort_order' => 'nullable|integer|min:0',
             'starts_at'  => 'nullable|date',
             'ends_at'    => 'nullable|date|after_or_equal:starts_at',
-        ]);
+        ];
+        if ($request->input('destination') === 'product') {
+            $rules['destination_id'] = 'required|integer|exists:products,id';
+        } elseif ($request->input('destination') === 'promo_code') {
+            $rules['destination_id'] = 'required|integer|exists:promo_codes,id';
+        } else {
+            $rules['destination_id'] = 'nullable|integer';
+        }
+        $data = $request->validate($rules);
         unset($data['image']);
 
         $data['sort_order'] = $data['sort_order'] ?? 0;

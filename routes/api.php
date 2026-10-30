@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymongoWebhookController;
 use App\Http\Controllers\Api\RiderController;
+use App\Http\Controllers\Api\RiderChatController;
 use App\Http\Controllers\Api\ReverseGeocodeController;
 use App\Http\Controllers\Api\SupportContactController;
 use App\Http\Controllers\Api\SupportChatController;
@@ -70,7 +71,9 @@ Route::prefix('v1')->group(function () {
             Route::get('location/reverse-geocode', ReverseGeocodeController::class)->middleware('throttle:30,1');
             Route::get('addresses',         [AddressController::class, 'index']);
             Route::post('addresses',        [AddressController::class, 'store']);
-            Route::delete('addresses/{id}', [AddressController::class, 'destroy']);
+            Route::get('addresses/{id}',    [AddressController::class, 'show'])->whereNumber('id');
+            Route::put('addresses/{id}',    [AddressController::class, 'update'])->whereNumber('id');
+            Route::delete('addresses/{id}', [AddressController::class, 'destroy'])->whereNumber('id');
 
             Route::get('favorites',                  [FavoriteController::class, 'index']);
             Route::post('favorites',                 [FavoriteController::class, 'store']);
@@ -88,6 +91,8 @@ Route::prefix('v1')->group(function () {
             Route::post('orders/{id}/payment/verify',  [OrderController::class, 'verify'])->middleware('throttle:60,1');
             Route::post('orders/{id}/cancel',          [OrderController::class, 'cancel']);
             Route::get('orders/{id}/tracking',         [OrderController::class, 'tracking']);
+            Route::get('orders/{orderId}/rider-chat', [RiderChatController::class, 'customerConversation'])->whereNumber('orderId');
+            Route::post('orders/{orderId}/rider-chat/messages', [RiderChatController::class, 'customerSend'])->whereNumber('orderId')->middleware('throttle:30,1');
             Route::post('orders/{id}/review',          [OrderController::class, 'review']);
         });
 
@@ -97,6 +102,8 @@ Route::prefix('v1')->group(function () {
             Route::put('profile', [RiderController::class, 'updateProfile']);
             Route::get('deliveries',                 [RiderController::class, 'index']);
             Route::get('deliveries/{id}',            [RiderController::class, 'show']);
+            Route::get('deliveries/{deliveryId}/chat', [RiderChatController::class, 'riderConversation'])->whereNumber('deliveryId');
+            Route::post('deliveries/{deliveryId}/chat/messages', [RiderChatController::class, 'riderSend'])->whereNumber('deliveryId')->middleware('throttle:30,1');
             Route::post('deliveries/{id}/accept',    [RiderController::class, 'accept']);
             Route::post('deliveries/{id}/decline',   [RiderController::class, 'decline']);
             Route::post('deliveries/{id}/pickup',    [RiderController::class, 'pickup']);

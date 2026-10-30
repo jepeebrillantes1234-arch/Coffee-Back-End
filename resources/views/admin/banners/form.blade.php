@@ -6,7 +6,7 @@
 
 <div class="grid xl:grid-cols-2 gap-6">
 <form method="POST" enctype="multipart/form-data"
-      action="{{ $banner->exists ? route('admin.banners.update', $banner) : route('admin.banners.store') }}"
+      action="{{ $banner->exists ? route('admin.banners.update', $banner, false) : route('admin.banners.store', [], false) }}"
       class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
     @csrf
     @if ($banner->exists) @method('PUT') @endif
@@ -49,7 +49,7 @@
         <div>
             <label class="block text-sm font-medium mb-1">Banner type</label>
             <select name="banner_type" class="{{ $in }}">
-                @foreach (['order_now' => 'Order Now', 'promo' => 'Promo', 'membership' => 'Membership', 'redeem' => 'Redeem', 'rewards' => 'Rewards', 'custom' => 'Custom'] as $value => $label)
+                @foreach (['new_product' => 'New Product', 'new_promo' => 'New Promo', 'promo_code' => 'Promo Code', 'special_offer' => 'Special Offer', 'announcement' => 'Announcement', 'order_now' => 'Order Now', 'promo' => 'Promo', 'membership' => 'Membership', 'redeem' => 'Redeem', 'rewards' => 'Rewards', 'custom' => 'Custom'] as $value => $label)
                     <option value="{{ $value }}" @selected(old('banner_type', $banner->banner_type) === $value)>{{ $label }}</option>
                 @endforeach
             </select>
@@ -58,11 +58,33 @@
         <div>
             <label class="block text-sm font-medium mb-1">Tap destination</label>
             <select name="destination" class="{{ $in }}">
-                @foreach (['menu' => 'Menu / Order Now', 'promos' => 'Promotions', 'profile' => 'Profile', 'cart' => 'Cart', 'orders' => 'My Orders'] as $value => $label)
+                @foreach (['product' => 'Product (choose below)', 'promos' => 'Promotions', 'promo_code' => 'Promo codes / Promotions', 'offer' => 'Special offers / Promotions', 'announcement' => 'Announcement details', 'menu' => 'Menu / Order Now', 'profile' => 'Profile', 'cart' => 'Cart', 'orders' => 'My Orders'] as $value => $label)
                     <option value="{{ $value }}" @selected(old('destination', $banner->destination) === $value)>{{ $label }}</option>
                 @endforeach
             </select>
             @error('destination') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Button text</label>
+            <input name="button_text" maxlength="30" value="{{ old('button_text', $banner->button_text) }}" placeholder="Shop now" class="{{ $in }}">
+            @error('button_text') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
+        </div>
+        <div>
+            <label class="block text-sm font-medium mb-1">Product / promo destination</label>
+            <select name="destination_id" class="{{ $in }}">
+                <option value="">Choose a product or promo code destination</option>
+                <optgroup label="Products (for Product destination)">
+                @foreach ($products as $product)
+                    <option value="{{ $product->id }}" @selected(old('destination', $banner->destination) === 'product' && (string) old('destination_id', $banner->destination_id) === (string) $product->id)>{{ $product->name }}</option>
+                @endforeach
+                </optgroup>
+                <optgroup label="Promo codes (for Promo Code destination)">
+                @foreach ($promoCodes as $promoCode)
+                    <option value="{{ $promoCode->id }}" @selected(old('destination') === 'promo_code' && (string) old('destination_id', $banner->destination_id) === (string) $promoCode->id)>{{ $promoCode->code }}</option>
+                @endforeach
+                </optgroup>
+            </select>
+            @error('destination_id') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
         </div>
     </div>
 

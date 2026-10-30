@@ -36,8 +36,22 @@ class ReverseGeocodeController extends Controller
             }
 
             $google = $response->json();
-            if (! is_array($google) || ($google['status'] ?? null) !== 'OK') {
-                return $this->fail('Could not find a readable address for this pin.', 422);
+            $providerStatus = is_array($google)
+                ? (string) ($google['status'] ?? 'UNKNOWN')
+                : 'INVALID_RESPONSE';
+            if ($providerStatus !== 'OK') {
+                // Keep provider diagnostics safe: record only the status, never
+                // request URLs or credentials. Non-geocoding provider errors
+                // are service failures, not invalid customer coordinates.
+                logger()->warning('Google reverse geocoding returned no result.', [
+                    'provider_status' => $providerStatus,
+                    'result_count' => is_array($google) && is_array($google['results'] ?? null)
+                        ? count($google['results'])
+                        : 0,
+                ]);
+                return $providerStatus === 'ZERO_RESULTS'
+                    ? $this->fail('Could not find a readable address for this pin.', 422)
+                    : $this->fail('Location lookup is temporarily unavailable. Please try again.', 502);
             }
 
             $results = $google['results'] ?? [];
@@ -49,6 +63,10 @@ class ReverseGeocodeController extends Controller
             });
             $result = $results[0] ?? null;
             if (! is_array($result)) {
+                logger()->warning('Google reverse geocoding returned an empty result list.', [
+                    'provider_status' => $providerStatus,
+                    'result_count' => count($results),
+                ]);
                 return $this->fail('Could not find a readable address for this pin.', 422);
             }
 
@@ -104,6 +122,10 @@ class ReverseGeocodeController extends Controller
             ]);
             $province = $findComponent(['administrative_area_level_1']);
             $country = $findComponent(['country']);
+            $streetNumber = $findComponent(['street_number']);
+            $streetName = $findComponent(['route']);
+            $street = trim(implode(' ', array_filter([$streetNumber, $streetName])));
+            $postalCode = $findComponent(['postal_code']);
             $parts = array_values(array_unique(array_filter([
                 $barangay,
                 $city,
@@ -117,13 +139,19 @@ class ReverseGeocodeController extends Controller
                 'name' => $name,
                 'address' => $fullAddress,
                 'formatted_address' => $formattedAddress,
+                'street' => $street,
                 'barangay' => $barangay,
                 'city' => $city,
                 'province' => $province,
+                'postal_code' => $postalCode,
                 'country' => $country,
             ]);
         } catch (\Throwable $exception) {
-            report($exception);
+            // Do not report the raw HTTP exception: its request URL may contain
+            // the Google key in the query string. Log only a safe class name.
+            logger()->warning('Google reverse geocoding request failed.', [
+                'exception_type' => get_class($exception),
+            ]);
             return $this->fail('Location lookup timed out. You can enter the address manually.', 502);
         }
     }

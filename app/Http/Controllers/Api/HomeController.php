@@ -41,16 +41,7 @@ class HomeController extends Controller
             'shop_lng' => isset($settings['shop_lng']) ? (float) $settings['shop_lng'] : null,
         ];
 
-        $banners = Banner::live()
-            ->where(function ($query) use ($isNewCustomer) {
-                $query->where('audience', 'all');
-                if ($isNewCustomer) {
-                    $query->orWhere('audience', 'new_customers');
-                }
-            })
-            ->orderBy('sort_order')
-            ->orderByDesc('id')
-            ->get();
+        $banners = $this->liveHomeBanners($isNewCustomer);
 
         return response()->json([
             'success' => true,
@@ -83,33 +74,46 @@ class HomeController extends Controller
         ]);
     }
 
-    /** Public, whitelisted Home banners only. */
+    /** Public, whitelisted Home banners. Promo codes stay on the Promotions API. */
     public function banners()
     {
-        $banners = Banner::live()
-            ->where('audience', 'all')
+        return response()->json([
+            'success' => true,
+            'message' => 'OK',
+            'data' => $this->liveHomeBanners(false),
+            'errors' => null,
+        ]);
+    }
+
+    private function liveHomeBanners(bool $isNewCustomer): array
+    {
+        return Banner::live()
+            ->where(function ($query) use ($isNewCustomer) {
+                $query->where('audience', 'all');
+                if ($isNewCustomer) {
+                    $query->orWhere('audience', 'new_customers');
+                }
+            })
             ->orderBy('sort_order')
             ->orderByDesc('id')
+            ->limit(5)
             ->get()
             ->map(fn (Banner $banner) => [
                 'id' => $banner->id,
+                'source_type' => 'banner',
                 'title' => $banner->title,
                 'headline' => $banner->headline,
                 'description' => $banner->description,
                 'image_url' => $banner->image_url,
                 'banner_type' => $banner->banner_type,
                 'destination' => $banner->destination,
+                'destination_id' => $banner->destination_id,
+                'button_text' => $banner->button_text,
                 'sort_order' => (int) $banner->sort_order,
                 'is_active' => true,
             ])
-            ->values();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'OK',
-            'data' => $banners,
-            'errors' => null,
-        ]);
+            ->values()
+            ->all();
     }
     /** Public promo list so the Promos screen does not depend on home merchandising data. */
     public function promos()

@@ -2,15 +2,15 @@
 @section('title', 'Banners')
 @section('content')
 <div class="flex items-center justify-between mb-2">
-    <h1 class="text-2xl font-semibold">Home Banners</h1>
+    <h1 class="text-2xl font-semibold">Home Banners &amp; Promotional Announcements</h1>
     <a href="{{ route('admin.banners.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium">+ New Banner</a>
 </div>
-<p class="text-sm text-espresso/60 mb-6">These banners appear in display order on the Customer App Home screen. Promo banners open the existing Promotions page and never apply a promo automatically.</p>
+<p class="text-sm text-espresso/60 mb-6">Active, scheduled banners appear in display order in the Customer App Home carousel. The API returns at most five. Promo and promo-code banners open the existing Promotions page and never apply a promo automatically.</p>
 
 <div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
         <thead class="bg-espresso/5 text-left text-espresso/70">
-            <tr><th class="p-3">Image</th><th class="p-3">Text</th><th class="p-3">Type</th><th class="p-3">Destination</th><th class="p-3">Audience</th><th class="p-3">Schedule</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
+    <tr><th class="p-3">Image</th><th class="p-3">Text</th><th class="p-3">Type</th><th class="p-3">Destination</th><th class="p-3">Audience</th><th class="p-3">Schedule</th><th class="p-3">Order</th><th class="p-3">Status</th><th class="p-3 text-right">Action</th></tr>
         </thead>
         <tbody>
         @forelse ($banners as $b)
@@ -23,6 +23,7 @@
                     <p class="text-xs text-espresso/60">{{ $b->title }}</p>
                     <p class="font-semibold">{{ $b->headline }}</p>
                     <p class="text-xs text-espresso/60">{{ $b->description }}</p>
+                    @if ($b->button_text) <p class="text-xs text-caramel">Button: {{ $b->button_text }}</p> @endif
                 </td>
                 <td class="p-3">{{ str($b->banner_type)->replace('_', ' ')->title() }}</td>
                 <td class="p-3">{{ str($b->destination)->title() }}</td>

@@ -15,6 +15,10 @@ return [
     */
 
     'google' => ['client_id' => env('GOOGLE_WEB_CLIENT_ID'), 'maps_geocoding_key' => env('GOOGLE_MAPS_API_KEY')],
+    'routing' => [
+        'provider' => env('ROUTING_PROVIDER', 'osrm'),
+        'osrm_base_url' => env('OSRM_BASE_URL', 'https://router.project-osrm.org'),
+    ],
     'firebase' => [
         'project_id' => env('FIREBASE_PROJECT_ID', 'kjm-coffee-shop'),
         'credentials' => env('FIREBASE_CREDENTIALS'),

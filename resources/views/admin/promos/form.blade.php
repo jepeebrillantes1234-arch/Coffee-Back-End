@@ -16,7 +16,7 @@
 </div>
 
 <form method="POST" enctype="multipart/form-data"
-      action="{{ $promo->exists ? route('admin.promos.update', $promo) : route('admin.promos.store') }}"
+      action="{{ $promo->exists ? route('admin.promos.update', $promo, false) : route('admin.promos.store', [], false) }}"
       class="max-w-4xl space-y-6 rounded-2xl bg-white p-6 shadow-sm">
     @csrf
     @if ($promo->exists) @method('PUT') @endif

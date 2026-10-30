@@ -15,7 +15,9 @@ use App\Support\Geo;
 use App\Support\Notifier;
 use App\Support\Settings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -41,8 +43,9 @@ class OrderController extends Controller
         if($method==='qrph' && config('paymongo.mode')!=='simulated' && !filled(config('paymongo.secret'))) return $this->fail('Online payment is not configured yet. Please choose Cash on Delivery or contact the shop.',503);
         if($data['order_type']==='delivery' && $method==='cash') return $this->fail('COD o QRPh lang ang puwedeng bayad para sa delivery.');
         if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
-        $quote=$this->quote($request->user(),$data);
-        $order=DB::transaction(function()use($request,$data,$method,$quote){
+        $quote=null;
+        $order=DB::transaction(function()use($request,$data,$method,&$quote){
+            $quote=$this->quote($request->user(),$data,true);
             $o=Order::create(['order_number'=>'KJM-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
                 'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
                 'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],'delivery_fee'=>$quote['delivery_fee'],'total'=>$quote['total'],
@@ -78,7 +81,7 @@ class OrderController extends Controller
 
     public function index(Request $request)
     {
-        $orders=Order::with(['items.options','items.product','review','payments'])->where('user_id',$request->user()->id)->latest('id')->limit(100)->get();
+        $orders=Order::with(['items.options','items.product','review','payments'])->where('user_id',$request->user()->id)->whereNull('customer_archived_at')->latest('id')->limit(100)->get();
         return $this->ok($orders->map(fn($o)=>$this->clientOrder($o))->values());
     }
 
@@ -91,11 +94,10 @@ class OrderController extends Controller
     public function destroy(Request $request,int $id)
     {
         $order=Order::where('user_id',$request->user()->id)->findOrFail($id);
-        if(!in_array($order->status,['completed','delivered','cancelled','rejected'],true)) {
-            return $this->fail('Only completed or cancelled orders can be deleted.',409);
+        if (!$order->customer_archived_at) {
+            $order->forceFill(['customer_archived_at'=>now()])->save();
         }
-        $order->delete();
-        return $this->ok(['deleted'=>true],'Order deleted');
+        return $this->ok(['archived'=>true],'Order removed from your history');
     }
     public function pay(Request $request,int $id)
     {
@@ -120,7 +122,7 @@ class OrderController extends Controller
         try {
             DB::transaction(function () use ($o, $request, $data) {
                 $locked = Order::whereKey($o->id)->lockForUpdate()->firstOrFail();
-                if (!$locked->canCancel()) {
+                if (!in_array($locked->status, ['awaiting_payment', 'pending'], true)) {
                     throw new \DomainException('This order can no longer be cancelled because it has already progressed.');
                 }
                 $locked->update(['status'=>'cancelled','reject_reason'=>$data['reason']]);
@@ -139,11 +141,81 @@ class OrderController extends Controller
     {
         $o=Order::with(['delivery.rider.riderProfile','items.options'])->where('user_id',$request->user()->id)->findOrFail($id);
         $delivery=$o->delivery;$rider=null;
-        if($delivery && $delivery->rider){$profile=$delivery->rider->riderProfile;$rider=['name'=>$delivery->rider->name,'phone'=>$delivery->rider->phone,'status'=>$delivery->status,'lat'=>$profile?->current_lat,'lng'=>$profile?->current_lng,'eta_min'=>null];}
-        $timeline=DB::table('order_status_logs')->where('order_id',$o->id)->orderBy('id')->get()->map(fn($l)=>['status'=>$l->status,'at'=>$l->created_at])->values();
-        return $this->ok(['order'=>$this->clientOrder($o),'rider'=>$rider,
-            'destination'=>['lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng],
-            'shop'=>['lat'=>(float)Settings::get('shop_lat',0),'lng'=>(float)Settings::get('shop_lng',0)],'timeline'=>$timeline]);
+        $finished=in_array($o->status,['delivered','completed','cancelled','rejected'],true)
+            || ($delivery && in_array($delivery->status,['delivered','completed','cancelled','rejected'],true));
+        if(!$finished && $delivery && $delivery->rider){$profile=$delivery->rider->riderProfile;$rider=['name'=>$delivery->rider->name,'phone'=>$delivery->rider->phone,'avatar_url'=>$delivery->rider->avatar ? '/storage/'.ltrim($delivery->rider->avatar,'/') : null,'plate_number'=>$profile?->plate_number,'status'=>$delivery->status,'lat'=>null,'lng'=>null,'last_updated_at'=>null,'eta_min'=>null];}
+        $latestLocation=null;
+        if(!$finished && $delivery && $delivery->rider && in_array($delivery->status,['accepted','picked_up','on_the_way','out_for_delivery'],true)){
+            $latestLocation=DB::table('rider_locations')->where('delivery_id',$delivery->id)->where('rider_id',$delivery->rider_id)->orderByDesc('recorded_at')->orderByDesc('id')->first();
+            if($rider && $latestLocation){
+                $rider['lat']=(float)$latestLocation->latitude;
+                $rider['lng']=(float)$latestLocation->longitude;
+                $rider['last_updated_at']=\Illuminate\Support\Carbon::parse($latestLocation->recorded_at)->toIso8601String();
+            }
+        }
+        $destination=['lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng,'address'=>$o->delivery_address];
+        $shop=['lat'=>(float)Settings::get('shop_lat',0),'lng'=>(float)Settings::get('shop_lng',0)];
+        $origin=$rider && $rider['lat']!==null && $rider['lng']!==null
+            ? ['lat'=>(float)$rider['lat'],'lng'=>(float)$rider['lng']]
+            : null;
+        $route=$finished ? ['status'=>'finished','error'=>null,'points'=>[]] : $this->trackingRoute($o,$origin,$destination);
+        $timeline=DB::table('order_status_logs')->where('order_id',$o->id)->orderBy('id')->get()->map(fn($l)=>['status'=>$l->status,'at'=>\Illuminate\Support\Carbon::parse($l->created_at,'UTC')->utc()->toIso8601String()])->values();
+        return $this->ok(['order'=>$this->clientOrder($o),'delivery_status'=>$delivery?->status,'rider'=>$rider,'destination'=>$destination,
+            'shop'=>$shop,'route'=>$route,'timeline'=>$timeline]);
+    }
+
+    private function trackingRoute(Order $order, ?array $origin, array $destination): array
+    {
+        if (config('services.routing.provider') !== 'osrm') {
+            return ['status'=>'unavailable','error'=>'Road routing is not configured.','points'=>[]];
+        }
+        if (!$origin || $destination['lat'] === null || $destination['lng'] === null) {
+            return ['status'=>'unavailable','error'=>'A route is not available until both locations are known.','points'=>[]];
+        }
+
+        $key='tracking.osrm.order.'.$order->id;
+        $last=Cache::get($key.'.route');
+        $attempt=(int)Cache::get($key.'.last_attempt',0);
+        $now=now()->timestamp;
+        $movedKm=isset($last['origin'])
+            ? Geo::km((float)$last['origin']['lat'],(float)$last['origin']['lng'],(float)$origin['lat'],(float)$origin['lng'])
+            : INF;
+        if ($last && $now-(int)$last['fetched_at']<45 && $movedKm<0.05) {
+            return $last+['status'=>'available','error'=>null];
+        }
+        if ($now-$attempt<20) {
+            return $last
+                ? $last+['status'=>'stale','error'=>'Refreshing the road route shortly. Showing the last available route.']
+                : ['status'=>'loading','error'=>null,'points'=>[]];
+        }
+
+        Cache::put($key.'.last_attempt',$now,now()->addMinutes(10));
+        try {
+            $base=rtrim((string)config('services.routing.osrm_base_url'),' /');
+            $url=$base.'/route/v1/driving/'.(float)$origin['lng'].','.(float)$origin['lat'].';'.(float)$destination['lng'].','.(float)$destination['lat'];
+            $response=Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (order tracking)')->timeout(5)->get($url,[
+                'overview'=>'full','geometries'=>'geojson','steps'=>'false',
+            ]);
+            $body=$response->json();
+            $coordinates=$body['routes'][0]['geometry']['coordinates']??[];
+            if (!$response->successful() || ($body['code']??null)!=='Ok' || count($coordinates)<2) {
+                throw new \RuntimeException('OSRM returned no usable route.');
+            }
+            $route=['points'=>array_map(fn($point)=>['lat'=>(float)$point[1],'lng'=>(float)$point[0]],$coordinates),
+                'distance_meters'=>(int)round((float)$body['routes'][0]['distance']),
+                'duration_seconds'=>(int)round((float)$body['routes'][0]['duration']),
+                'origin'=>$origin,'fetched_at'=>$now];
+            Cache::put($key.'.route',$route,now()->addHours(6));
+            return $route+['status'=>'available','error'=>null];
+        } catch (\Throwable $exception) {
+            logger()->warning('OSRM tracking route unavailable.',[
+                'order_id'=>$order->id,
+                'exception'=>class_basename($exception),
+            ]);
+            return $last
+                ? $last+['status'=>'stale','error'=>'Road routing is temporarily unavailable. Showing the last available route.']
+                : ['status'=>'unavailable','error'=>'Road routing is temporarily unavailable.','points'=>[]];
+        }
     }
 
     public function review(Request $request,int $id)
@@ -161,11 +233,13 @@ class OrderController extends Controller
             'items.*.quantity'=>'required|integer|min:1|max:50','items.*.option_ids'=>'nullable|array','items.*.option_ids.*'=>'integer',
             'items.*.notes'=>'nullable|string|max:255','order_type'=>($forOrder?'required':'nullable').'|in:delivery,pickup',
             'payment_method'=>'nullable|in:cod,cash,qrph','promo_code'=>'nullable|string|max:30',
-            'delivery_address'=>'required_if:order_type,delivery|nullable|string|max:1000',
+            'delivery_address'=>$forOrder
+                ? 'required_if:order_type,delivery|nullable|string|max:1000'
+                : 'nullable|string|max:1000',
             'delivery_lat'=>'nullable|numeric|between:-90,90','delivery_lng'=>'nullable|numeric|between:-180,180','notes'=>'nullable|string|max:1000']);
     }
 
-    private function quote(User $user,array $data):array
+    private function quote(User $user,array $data,bool $lockPromo=false):array
     {
         $lines=[];$subtotal=0.0;
         foreach(($data['items']??[]) as $input){
@@ -195,9 +269,20 @@ class OrderController extends Controller
         if($isFirst && (bool)((int)Settings::get('first_order_enabled',1))){$firstDiscount=min($subtotal*(float)Settings::get('first_order_percent',15)/100,(float)Settings::get('first_order_max',100));}
         $promo=null;$promoDiscount=0.0;
         if(!empty($data['promo_code'])){
-            $promo=PromoCode::live()->where('show_in_app',true)->whereRaw('upper(code)=?', [strtoupper($data['promo_code'])])->first();
+            $promoQuery=PromoCode::live()->where('show_in_app',true)->whereRaw('upper(code)=?', [strtoupper($data['promo_code'])]);
+            if($lockPromo) $promoQuery->lockForUpdate();
+            $promo=$promoQuery->first();
             if(!$promo) throw ValidationException::withMessages(['promo_code'=>'Hindi valid o expired ang promo code.']);
-            if($subtotal<(float)$promo->min_order) throw ValidationException::withMessages(['promo_code'=>'Hindi pa abot sa minimum order ang subtotal.']);
+            $minimumOrder = max(
+                (float) $promo->min_order,
+                strtoupper($promo->code) === 'JEPEE33' ? 200.0 : 0.0,
+            );
+            if($subtotal < $minimumOrder) {
+                $message = strtoupper($promo->code) === 'JEPEE33'
+                    ? 'JEPEE33 is valid only when the eligible product subtotal is at least ₱200.00.'
+                    : 'The eligible product subtotal does not meet this promo code’s minimum order.';
+                throw ValidationException::withMessages(['promo_code' => $message]);
+            }
             if($promo->usage_limit && $promo->usages()->count()>=(int)$promo->usage_limit) throw ValidationException::withMessages(['promo_code'=>'Naabot na ang limit ng promo na ito.']);
             if($promo->usages()->where('user_id',$user->id)->count()>=(int)$promo->per_user_limit) throw ValidationException::withMessages(['promo_code'=>'Nagamit mo na ang limit ng promo na ito.']);
             if($promo->type==='percent') $promoDiscount=$subtotal*(float)$promo->value/100;
@@ -233,7 +318,7 @@ class OrderController extends Controller
             'payment_expires_at'=>$o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
             'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment'
                 && (bool)((int)Settings::get('payment_qrph_enabled',1)),
-            'can_cancel'=>$o->canCancel(),'has_review'=>$o->review!==null,
+            'can_cancel'=>in_array($o->status,['awaiting_payment','pending'],true),'has_review'=>$o->review!==null,
 'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'image_url'=>$i->product?->image_url,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
     }
 
