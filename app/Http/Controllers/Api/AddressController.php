@@ -50,7 +50,9 @@ class AddressController extends Controller
         $data['full_address'] = trim((string) ($data['full_address'] ?? '')) ?: $data['formatted_address'];
 
         $uid = $request->user()->id;
-        $isDefault = $request->boolean('is_default');
+        $isDefault = $request->boolean('is_default')
+            || ! Address::where('user_id', $uid)->where('is_default', true)->exists();
+        $data['is_default'] = $isDefault;
         if ($isDefault) {
             Address::where('user_id', $uid)->update(['is_default' => false]);
         }
@@ -112,6 +114,15 @@ class AddressController extends Controller
             Address::where('user_id', $request->user()->id)
                 ->where('id', '!=', $address->id)
                 ->update(['is_default' => false]);
+        } elseif (array_key_exists('is_default', $data)
+            && ! $request->boolean('is_default')
+            && $address->is_default
+            && ! Address::where('user_id', $request->user()->id)
+                ->where('id', '!=', $address->id)
+                ->where('is_default', true)
+                ->exists()) {
+            // Keep one usable default instead of leaving the customer without one.
+            $data['is_default'] = true;
         }
 
         $address->fill($data)->save();
@@ -121,7 +132,18 @@ class AddressController extends Controller
 
     public function destroy(Request $request, int $id)
     {
-        Address::where('user_id', $request->user()->id)->findOrFail($id)->delete();
+        $uid = $request->user()->id;
+        \DB::transaction(function () use ($uid, $id) {
+            $address = Address::where('user_id', $uid)->lockForUpdate()->findOrFail($id);
+            $address->delete();
+
+            if (! Address::where('user_id', $uid)->where('is_default', true)->exists()) {
+                $replacement = Address::where('user_id', $uid)->latest('id')->first();
+                if ($replacement) {
+                    $replacement->update(['is_default' => true]);
+                }
+            }
+        });
 
         return $this->ok(null, 'Nabura');
     }

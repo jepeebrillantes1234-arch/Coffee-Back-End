@@ -60,6 +60,44 @@ class OrderTrackingRoutingTest extends TestCase
         ));
     }
 
+    public function test_rider_delivery_returns_latest_assigned_gps_and_shared_road_route(): void
+    {
+        Cache::flush();
+        config(['services.routing.provider' => 'osrm', 'services.routing.osrm_base_url' => 'https://router.project-osrm.org']);
+        Http::fake(['router.project-osrm.org/route/v1/driving/*' => Http::response($this->osrmSuccess(), 200)]);
+        [$customer, $order] = $this->deliveryOrder();
+        $delivery = $order->delivery;
+        $assignedRider = $delivery->rider;
+        $otherRider = $this->user('rider');
+        DB::table('rider_locations')->insert([
+            'delivery_id' => $delivery->id,
+            'rider_id' => $otherRider->id,
+            'latitude' => 15.99,
+            'longitude' => 120.59,
+            'recorded_at' => now()->addSecond(),
+        ]);
+
+        $this->actingAs($assignedRider, 'sanctum')
+            ->getJson("/api/v1/rider/deliveries/{$delivery->id}")
+            ->assertOk()
+            ->assertJsonPath('data.rider_location.lat', 15.95)
+            ->assertJsonPath('data.rider_location.lng', 120.53)
+            ->assertJsonPath('data.route.status', 'available')
+            ->assertJsonPath('data.route.points.0.lat', 15.95)
+            ->assertJsonPath('data.route.points.0.lng', 120.53)
+            ->assertJsonPath('data.route.points.2.lat', 15.96)
+            ->assertJsonPath('data.route.points.2.lng', 120.54);
+
+        Http::assertSentCount(1);
+
+        $order->update(['status' => 'delivered']);
+        $this->getJson("/api/v1/rider/deliveries/{$delivery->id}")
+            ->assertOk()
+            ->assertJsonPath('data.rider_location', null)
+            ->assertJsonPath('data.route.status', 'finished')
+            ->assertJsonPath('data.route.points', []);
+        Http::assertSentCount(1);
+    }
     public function test_route_failure_returns_last_valid_route_and_a_safe_status_message(): void
     {
         Cache::flush();

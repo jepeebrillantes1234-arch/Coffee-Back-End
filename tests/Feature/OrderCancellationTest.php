@@ -22,6 +22,10 @@ class OrderCancellationTest extends TestCase
             ->assertUnprocessable();
         $this->assertSame('pending', $order->fresh()->status);
 
+        $this->getJson("/api/v1/orders/{$order->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_cancel', true);
+
         $this->postJson("/api/v1/orders/{$order->id}/cancel", ['reason' => 'Ordered by mistake'])
             ->assertOk()
             ->assertJsonPath('data.status', 'cancelled')

@@ -38,6 +38,28 @@
         .admin-page-content{min-width:0;width:100%}.admin-page-content img,.admin-page-content video{max-width:100%}.admin-page-content input[type=file]{max-width:100%}.admin-page-content table{display:block;width:100%;min-width:680px;overflow-x:auto;-webkit-overflow-scrolling:touch}
         @media(max-width:850px){.admin-page-content{overflow-wrap:anywhere}.workspace.admin-responsive .workspace-heading{align-items:flex-start;gap:10px}.workspace.admin-responsive .workspace-heading .system-status{flex:none;padding:7px 9px;font-size:10px}}
         @media(max-width:640px){.admin-page-content h1{font-size:1.35rem;line-height:1.25}.admin-page-content :is(input,select,textarea,button){max-width:100%}.admin-page-content input[type=file]{display:block;width:100%;font-size:12px}.admin-page-content [class~="grid-cols-2"]{grid-template-columns:minmax(0,1fr)}.admin-page-content > .flex{flex-wrap:wrap}.admin-page-content table{min-width:620px}.workspace.admin-responsive .workspace-heading{flex-wrap:wrap}.workspace.admin-responsive .workspace-heading>div{min-width:0}}
+        /* KJM neutral monochrome workspace palette. Theme persistence stays in the existing script. */
+        :root{--coffee:#111;--coffee-2:#222;--caramel:#111;--cream:#f5f5f5;--ink:#222;--muted:#777;--line:#e5e5e5;--surface:#fff}
+        body{background:#f5f5f5;color:#222}.admin-sidebar{background:#111;color:#fff}.brand-mark{background:#fff}
+        .nav-heading{color:#aaa}.nav-link{color:#f5f5f5}.nav-link.active{background:#383838;box-shadow:none;color:#fff}.nav-icon{color:#ddd}.nav-active-dot{background:#fff}
+        .topbar,.admin-profile-panel{background:#fff;color:#222;border-color:#e5e5e5}.topbar-leaves{display:none}.icon-button,.account-chevron{color:#222}
+        .search-wrap{background:#f5f5f5;color:#777}.search-wrap input{color:#222}.admin-panel-avatar,.account-avatar{background:#f5f5f5;color:#222}
+        .workspace{background:#f5f5f5;color:#222}.workspace [class~="bg-cream"]{background:#f5f5f5}.workspace [class~="bg-white"],.admin-panel-card{background:#fff;border-color:#e5e5e5}
+        .admin-panel-head,.admin-panel-link,.admin-menu-link{border-color:#e5e5e5;color:#222}.admin-menu-link:hover,.admin-profile-panel .admin-panel-link:hover{background:#f5f5f5;color:#111}
+        .admin-theme-row button{background:#fff;color:#222;border-color:#e5e5e5}.admin-theme-row button.active{background:#111;border-color:#111;color:#fff}
+        .admin-profile-panel{border-color:#e5e5e5;box-shadow:0 12px 32px #00000014}
+        .admin-profile-panel [class*="text-[#573429]"]{color:#222!important}.admin-profile-panel [class*="bg-[#f2e3d5]"]{background:#f5f5f5!important}
+        body[data-admin-theme=dark]{--cream:#121212;--ink:#f5f5f5;--muted:#aaa;--line:#383838;--surface:#1e1e1e;--coffee:#f5f5f5;--coffee-2:#fff;--caramel:#fff;color-scheme:dark}
+        body[data-admin-theme=dark] .admin-content,body[data-admin-theme=dark] .workspace{background:#121212;color:#f5f5f5}
+        body[data-admin-theme=dark] .admin-sidebar{background:#000;color:#fff}body[data-admin-theme=dark] .nav-link.active{background:#383838}
+        body[data-admin-theme=dark] .topbar,body[data-admin-theme=dark] .admin-profile-panel,body[data-admin-theme=dark] .admin-panel-card,body[data-admin-theme=dark] .workspace [class~="bg-white"]{background:#1e1e1e!important;color:#f5f5f5;border-color:#383838}
+        body[data-admin-theme=dark] .workspace [class~="bg-cream"]{background:#121212!important}
+        body[data-admin-theme=dark] .workspace :is([class*="text-espresso"],[class*="text-gray-"],[class*="text-black"]),body[data-admin-theme=dark] .admin-profile-panel :is(.text-gray-700,.text-amber-900){color:#f5f5f5!important}
+        body[data-admin-theme=dark] .workspace :is(input:not([type=hidden]),select,textarea){background:#1e1e1e!important;color:#f5f5f5!important;border-color:#383838!important}
+        body[data-admin-theme=dark] .workspace table th,body[data-admin-theme=dark] .workspace table td,body[data-admin-theme=dark] .workspace hr{border-color:#383838!important}
+        body[data-admin-theme=dark] .workspace thead{background:#1e1e1e;color:#f5f5f5}
+        body[data-admin-theme=dark] .admin-profile-panel [class*="text-[#573429]"]{color:#f5f5f5!important}body[data-admin-theme=dark] .admin-profile-panel [class*="bg-[#f2e3d5]"]{background:#383838!important}
+        body[data-admin-theme=dark] .admin-theme-row button{background:#1e1e1e;color:#f5f5f5;border-color:#383838}body[data-admin-theme=dark] .admin-theme-row button.active{background:#fff;border-color:#fff;color:#111}
         @yield('admin-styles')
     </style>
 </head>
@@ -70,7 +92,7 @@
         'Overview' => [['Dashboard', route('admin.dashboard'), 'admin', 'grid']],
         'Catalog' => [['Products', route('admin.products.index'), 'admin/products*', 'box'], ['Categories', route('admin.categories.index'), 'admin/categories*', 'folder'], ['Promos', route('admin.promos.index'), 'admin/promos*', 'tag'], ['Rewards', route('admin.rewards.index'), 'admin/rewards*', 'star'], ['Banners', route('admin.banners.index'), 'admin/banners*', 'home'], ['Discount & Fees', route('admin.settings.edit'), 'admin/settings*', 'dollar']],
         'People' => [['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'], ['Memberships', route('admin.memberships.index'), 'admin/memberships*', 'card'], ['Staff', route('admin.users.index', 'staff'), 'admin/users/staff*', 'badge'], ['Riders', route('admin.users.index', 'rider'), 'admin/users/rider*', 'bike']],
-        'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file'], ['Customer Support', route('admin.support.index'), 'admin/support*', 'users']],
+        'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Cancellation History', route('admin.orders.cancellations'), 'admin/orders/cancellations*', 'file'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file'], ['Customer Support', route('admin.support.index'), 'admin/support*', 'users']],
     ];
     $svg = fn (string $key, string $class = '') => '<svg class="' . $class . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($icons[$key] ?? '') . '</svg>';
     $user = auth()->user();

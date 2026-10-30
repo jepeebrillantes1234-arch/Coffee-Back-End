@@ -86,6 +86,60 @@ class StructuredAddressTest extends TestCase
         $this->assertDatabaseCount('addresses', 0);
     }
 
+    public function test_first_address_becomes_default_and_deleting_it_promotes_another_owned_address(): void
+    {
+        $customer = $this->customer();
+        $otherCustomer = $this->customer();
+
+        $first = $this->actingAs($customer, 'sanctum')->postJson('/api/v1/addresses', [
+            'label' => 'Home',
+            'street' => '12 Main Road',
+            'latitude' => 15.95,
+            'longitude' => 120.53,
+        ])->assertCreated()->assertJsonPath('data.is_default', true);
+
+        $second = $this->postJson('/api/v1/addresses', [
+            'label' => 'Work',
+            'street' => '8 Market Street',
+            'latitude' => 15.96,
+            'longitude' => 120.54,
+            'is_default' => false,
+        ])->assertCreated()->assertJsonPath('data.is_default', false);
+
+        $otherAddress = \App\Models\Address::create([
+            'user_id' => $otherCustomer->id,
+            'label' => 'Other customer',
+            'full_address' => 'Another address',
+            'latitude' => 15.9,
+            'longitude' => 120.5,
+        ]);
+        $historicalOrder = \App\Models\Order::create([
+            'order_number' => 'KJM-ADDRESS-SNAPSHOT',
+            'user_id' => $customer->id,
+            'order_type' => 'delivery',
+            'status' => 'delivered',
+            'subtotal' => 100,
+            'total' => 130,
+            'payment_method' => 'cod',
+            'payment_status' => 'paid',
+            'delivery_address' => '12 Main Road',
+            'delivery_lat' => 15.95,
+            'delivery_lng' => 120.53,
+        ]);
+        $this->deleteJson('/api/v1/addresses/'.$otherAddress->id)->assertNotFound();
+        $this->deleteJson('/api/v1/addresses/'.$first->json('data.id'))->assertOk();
+
+        $this->getJson('/api/v1/addresses')->assertOk()
+            ->assertJsonPath('data.0.id', $second->json('data.id'))
+            ->assertJsonPath('data.0.is_default', true);
+        $this->assertDatabaseHas('orders', [
+            'id' => $historicalOrder->id,
+            'delivery_address' => '12 Main Road',
+            'delivery_lat' => 15.95,
+            'delivery_lng' => 120.53,
+        ]);
+    }
+
     public function test_checkout_using_saved_address_preserves_readable_address_and_exact_coordinates(): void
     {
         $customer = $this->customer();

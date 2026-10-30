@@ -15,9 +15,7 @@ use App\Support\Geo;
 use App\Support\Notifier;
 use App\Support\Settings;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -122,7 +120,7 @@ class OrderController extends Controller
         try {
             DB::transaction(function () use ($o, $request, $data) {
                 $locked = Order::whereKey($o->id)->lockForUpdate()->firstOrFail();
-                if (!in_array($locked->status, ['awaiting_payment', 'pending'], true)) {
+                if ($locked->status !== 'pending') {
                     throw new \DomainException('This order can no longer be cancelled because it has already progressed.');
                 }
                 $locked->update(['status'=>'cancelled','reject_reason'=>$data['reason']]);
@@ -166,58 +164,8 @@ class OrderController extends Controller
 
     private function trackingRoute(Order $order, ?array $origin, array $destination): array
     {
-        if (config('services.routing.provider') !== 'osrm') {
-            return ['status'=>'unavailable','error'=>'Road routing is not configured.','points'=>[]];
-        }
-        if (!$origin || $destination['lat'] === null || $destination['lng'] === null) {
-            return ['status'=>'unavailable','error'=>'A route is not available until both locations are known.','points'=>[]];
-        }
-
-        $key='tracking.osrm.order.'.$order->id;
-        $last=Cache::get($key.'.route');
-        $attempt=(int)Cache::get($key.'.last_attempt',0);
-        $now=now()->timestamp;
-        $movedKm=isset($last['origin'])
-            ? Geo::km((float)$last['origin']['lat'],(float)$last['origin']['lng'],(float)$origin['lat'],(float)$origin['lng'])
-            : INF;
-        if ($last && $now-(int)$last['fetched_at']<45 && $movedKm<0.05) {
-            return $last+['status'=>'available','error'=>null];
-        }
-        if ($now-$attempt<20) {
-            return $last
-                ? $last+['status'=>'stale','error'=>'Refreshing the road route shortly. Showing the last available route.']
-                : ['status'=>'loading','error'=>null,'points'=>[]];
-        }
-
-        Cache::put($key.'.last_attempt',$now,now()->addMinutes(10));
-        try {
-            $base=rtrim((string)config('services.routing.osrm_base_url'),' /');
-            $url=$base.'/route/v1/driving/'.(float)$origin['lng'].','.(float)$origin['lat'].';'.(float)$destination['lng'].','.(float)$destination['lat'];
-            $response=Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (order tracking)')->timeout(5)->get($url,[
-                'overview'=>'full','geometries'=>'geojson','steps'=>'false',
-            ]);
-            $body=$response->json();
-            $coordinates=$body['routes'][0]['geometry']['coordinates']??[];
-            if (!$response->successful() || ($body['code']??null)!=='Ok' || count($coordinates)<2) {
-                throw new \RuntimeException('OSRM returned no usable route.');
-            }
-            $route=['points'=>array_map(fn($point)=>['lat'=>(float)$point[1],'lng'=>(float)$point[0]],$coordinates),
-                'distance_meters'=>(int)round((float)$body['routes'][0]['distance']),
-                'duration_seconds'=>(int)round((float)$body['routes'][0]['duration']),
-                'origin'=>$origin,'fetched_at'=>$now];
-            Cache::put($key.'.route',$route,now()->addHours(6));
-            return $route+['status'=>'available','error'=>null];
-        } catch (\Throwable $exception) {
-            logger()->warning('OSRM tracking route unavailable.',[
-                'order_id'=>$order->id,
-                'exception'=>class_basename($exception),
-            ]);
-            return $last
-                ? $last+['status'=>'stale','error'=>'Road routing is temporarily unavailable. Showing the last available route.']
-                : ['status'=>'unavailable','error'=>'Road routing is temporarily unavailable.','points'=>[]];
-        }
+        return app(\App\Services\OrderTrackingRouter::class)->route($order->id, $origin, $destination);
     }
-
     public function review(Request $request,int $id)
     {
         $data=$request->validate(['rating'=>'required|integer|between:1,5','comment'=>'nullable|string|max:1000','product_id'=>'nullable|exists:products,id']);
@@ -318,7 +266,7 @@ class OrderController extends Controller
             'payment_expires_at'=>$o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
             'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment'
                 && (bool)((int)Settings::get('payment_qrph_enabled',1)),
-            'can_cancel'=>in_array($o->status,['awaiting_payment','pending'],true),'has_review'=>$o->review!==null,
+            'can_cancel'=>$o->status==='pending','has_review'=>$o->review!==null,
 'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'image_url'=>$i->product?->image_url,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
     }
 

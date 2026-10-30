@@ -7,6 +7,7 @@ use App\Models\Delivery;
 use App\Models\Payment;
 use App\Support\Notifier;
 use App\Support\Settings;
+use App\Services\OrderTrackingRouter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -115,9 +116,20 @@ class RiderController extends Controller
         // Keep rider history readable instead of throwing a 500 on a missing relation.
         $o=$d->order;
         $user=$o?->user;
+        $active=$o && $d->rider_id && $d->status==='on_the_way'
+            && !in_array($o->status,['delivered','completed','cancelled','rejected'],true);
+        $latest=$active
+            ? DB::table('rider_locations')->where('delivery_id',$d->id)->where('rider_id',$d->rider_id)->orderByDesc('recorded_at')->orderByDesc('id')->first()
+            : null;
+        $riderLocation=$latest ? ['lat'=>(float)$latest->latitude,'lng'=>(float)$latest->longitude,'updated_at'=>$latest->recorded_at] : null;
+        $destination=['lat'=>$o?->delivery_lat,'lng'=>$o?->delivery_lng];
+        $route=!$active
+            ? ['status'=>'finished','error'=>null,'points'=>[]]
+            : app(OrderTrackingRouter::class)->route($o->id,$riderLocation ? ['lat'=>$riderLocation['lat'],'lng'=>$riderLocation['lng']] : null,$destination);
         return ['id'=>$d->id,'status'=>$d->status,'distance_km'=>$d->distance_km,'proof_photo_url'=>$d->proof_photo_url,
             'customer'=>['name'=>$user?->name,'phone'=>$user?->phone],
             'shop'=>['lat'=>(float)Settings::get('shop_lat',0),'lng'=>(float)Settings::get('shop_lng',0)],
+            'rider_location'=>$riderLocation,'route'=>$route,
             'order'=>$o ? ['id'=>$o->id,'order_number'=>$o->order_number,'total'=>(float)$o->total,'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'address'=>$o->delivery_address,'lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng,'notes'=>$o->notes,
                 'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'options'=>$i->options->pluck('option_name')->values()])->values()] : null,
         ];

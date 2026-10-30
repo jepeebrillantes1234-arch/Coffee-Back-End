@@ -6,9 +6,9 @@
 @source '../**/*.js';
 
 @theme {
-    --color-espresso: #4B2E2B;
-    --color-cream:    #F5EBDD;
-    --color-caramel:  #C8843C;
+    --color-espresso: #222222;
+    --color-cream:    #F5F5F5;
+    --color-caramel:  #111111;
     --color-success:  #3C8D5A;
     --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
 }

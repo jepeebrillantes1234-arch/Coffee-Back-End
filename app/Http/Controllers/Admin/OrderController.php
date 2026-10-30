@@ -23,6 +23,100 @@ class OrderController extends Controller
         return view('admin.orders.index', compact('orders'));
     }
 
+    public function cancellations(Request $request)
+    {
+        $request->validate([
+            'search' => 'nullable|string|max:120',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date|after_or_equal:from',
+            'reason' => 'nullable|in:Change Address,Change Payment Method,Wrong Order,Others',
+        ]);
+        $latestCancellation = DB::table('order_status_logs')
+            ->selectRaw('order_id, MAX(created_at) as cancelled_at')
+            ->where('status', 'cancelled')
+            ->groupBy('order_id');
+
+        $query = Order::query()
+            ->leftJoinSub($latestCancellation, 'cancellation_logs', function ($join) {
+                $join->on('cancellation_logs.order_id', '=', 'orders.id');
+            })
+            ->with('user:id,name,email')
+            ->where('orders.status', 'cancelled')
+            ->select('orders.*')
+            ->selectRaw('COALESCE(cancellation_logs.cancelled_at, orders.updated_at) as cancelled_at');
+
+        $applyFilters = function ($builder, bool $includeReason = true) use ($request) {
+            if ($request->filled('search')) {
+                $search = trim((string) $request->input('search'));
+                $builder->where(function ($q) use ($search) {
+                    $q->where('orders.order_number', 'like', "%{$search}%")
+                        ->orWhere('orders.reject_reason', 'like', "%{$search}%")
+                        ->orWhereHas('user', function ($user) use ($search) {
+                            $user->where('name', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%");
+                        });
+                });
+            }
+
+            if ($request->filled('from')) {
+                $builder->whereDate(DB::raw('COALESCE(cancellation_logs.cancelled_at, orders.updated_at)'), '>=', $request->input('from'));
+            }
+            if ($request->filled('to')) {
+                $builder->whereDate(DB::raw('COALESCE(cancellation_logs.cancelled_at, orders.updated_at)'), '<=', $request->input('to'));
+            }
+            if ($includeReason && $request->filled('reason')) {
+                $this->filterCancellationReason($builder, (string) $request->input('reason'));
+            }
+        };
+        $applyFilters($query);
+
+        $counts = [];
+        foreach (['Change Address', 'Change Payment Method', 'Wrong Order', 'Others'] as $reason) {
+            $countQuery = Order::query()
+                ->leftJoinSub($latestCancellation, 'cancellation_logs', function ($join) {
+                    $join->on('cancellation_logs.order_id', '=', 'orders.id');
+                })
+                ->where('orders.status', 'cancelled');
+            $applyFilters($countQuery, false);
+            $this->filterCancellationReason($countQuery, $reason);
+            $counts[$reason] = $countQuery->count('orders.id');
+        }
+
+        $orders = $query->orderByDesc(DB::raw('COALESCE(cancellation_logs.cancelled_at, orders.updated_at)'))
+            ->paginate(15)->withQueryString();
+
+        return view('admin.orders.cancellations', compact('orders', 'counts'));
+    }
+
+    private function filterCancellationReason($query, string $reason): void
+    {
+        $prefixes = [
+            'Change Address' => ['Change Address', 'CHANGE_ADDRESS'],
+            'Change Payment Method' => ['Change Payment Method', 'CHANGE_PAYMENT_METHOD'],
+            'Wrong Order' => ['Wrong Order', 'WRONG_ORDER'],
+        ];
+
+        if (isset($prefixes[$reason])) {
+            $query->where(function ($q) use ($prefixes, $reason) {
+                foreach ($prefixes[$reason] as $prefix) {
+                    $q->orWhere('orders.reject_reason', 'like', $prefix.'%');
+                }
+            });
+            return;
+        }
+
+        if ($reason === 'Others') {
+            $query->where(function ($q) use ($prefixes) {
+                foreach (array_merge(...array_values($prefixes)) as $prefix) {
+                    $q->where(function ($nonMatch) use ($prefix) {
+                        $nonMatch->whereNull('orders.reject_reason')
+                            ->orWhere('orders.reject_reason', 'not like', $prefix.'%');
+                    });
+                }
+            });
+        }
+    }
+
     public function show(Order $order)
     {
         $order->load(['user', 'staff', 'items.options', 'delivery.rider', 'payments', 'review']);

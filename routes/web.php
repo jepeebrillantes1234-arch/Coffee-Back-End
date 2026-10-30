@@ -95,6 +95,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Orders (kasama na ang workflow)
     Route::get('orders',                    [OrderController::class, 'index'])->name('orders.index');
+    Route::get('orders/cancellations',      [OrderController::class, 'cancellations'])->name('orders.cancellations');
     Route::get('orders/{order}',            [OrderController::class, 'show'])->name('orders.show');
     Route::post('orders/{order}/confirm',   [OrderController::class, 'confirm'])->name('orders.confirm');
     Route::post('orders/{order}/reject',    [OrderController::class, 'reject'])->name('orders.reject');

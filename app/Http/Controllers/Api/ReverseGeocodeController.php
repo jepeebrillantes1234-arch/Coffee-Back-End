@@ -5,11 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\Responds;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class ReverseGeocodeController extends Controller
 {
     use Responds;
+
+    private const CACHE_PREFIX = 'nominatim:reverse:v3:';
+    private const LAST_REQUEST_KEY = 'nominatim:reverse:last-request';
 
     public function __invoke(Request $request)
     {
@@ -17,127 +21,128 @@ class ReverseGeocodeController extends Controller
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
         ]);
-        $key = config('services.google.maps_geocoding_key');
-        if (! is_string($key) || trim($key) === '') {
-            return $this->fail('Location lookup is not configured.', 503);
-        }
 
-        try {
-            $response = Http::timeout(8)->get(
-                'https://maps.googleapis.com/maps/api/geocode/json',
-                [
-                    'latlng' => $coordinates['latitude'].','.$coordinates['longitude'],
-                    'language' => 'en',
-                    'key' => $key,
-                ],
-            );
-            if (! $response->successful()) {
-                return $this->fail('Could not look up this location right now.', 502);
-            }
+        $latitude = (float) $coordinates['latitude'];
+        $longitude = (float) $coordinates['longitude'];
+        $coordinateKey = sprintf('%.7f|%.7f', $latitude, $longitude);
+        $cacheKey = self::CACHE_PREFIX.hash('sha256', $coordinateKey);
+        $cached = Cache::get($cacheKey);
 
-            $google = $response->json();
-            $providerStatus = is_array($google)
-                ? (string) ($google['status'] ?? 'UNKNOWN')
-                : 'INVALID_RESPONSE';
-            if ($providerStatus !== 'OK') {
-                // Keep provider diagnostics safe: record only the status, never
-                // request URLs or credentials. Non-geocoding provider errors
-                // are service failures, not invalid customer coordinates.
-                logger()->warning('Google reverse geocoding returned no result.', [
-                    'provider_status' => $providerStatus,
-                    'result_count' => is_array($google) && is_array($google['results'] ?? null)
-                        ? count($google['results'])
-                        : 0,
-                ]);
-                return $providerStatus === 'ZERO_RESULTS'
-                    ? $this->fail('Could not find a readable address for this pin.', 422)
-                    : $this->fail('Location lookup is temporarily unavailable. Please try again.', 502);
-            }
-
-            $results = $google['results'] ?? [];
-            // Google may return a road or plus-code first. Prefer the result
-            // with the most address components so barangay/city/province are
-            // retained when Google has them for the selected coordinates.
-            usort($results, static function ($left, $right) {
-                return count($right['address_components'] ?? []) <=> count($left['address_components'] ?? []);
-            });
-            $result = $results[0] ?? null;
-            if (! is_array($result)) {
-                logger()->warning('Google reverse geocoding returned an empty result list.', [
-                    'provider_status' => $providerStatus,
-                    'result_count' => count($results),
-                ]);
+        if (is_array($cached)) {
+            if (($cached['_no_result'] ?? false) === true) {
                 return $this->fail('Could not find a readable address for this pin.', 422);
             }
 
-            $formattedAddress = trim((string) ($result['formatted_address'] ?? ''));
-            $components = $result['address_components'] ?? [];
-            $priorities = [
-                'administrative_area_level_5',
-                'administrative_area_level_4',
-                'sublocality_level_1',
-                'sublocality_level_2',
-                'sublocality',
-                'neighborhood',
-                'administrative_area_level_3',
-                'locality',
-            ];
-            $name = '';
-            foreach ($priorities as $type) {
-                foreach ($components as $component) {
-                    if (in_array($type, $component['types'] ?? [], true)) {
-                        $name = trim((string) ($component['long_name'] ?? ''));
-                        if ($name !== '') {
-                            break 2;
-                        }
-                    }
-                }
-            }
-            if ($name === '') {
-                $name = trim((string) (explode(',', $formattedAddress)[0] ?? ''));
+            return $this->ok($cached);
+        }
+
+        // Cache::add is atomic for the configured shared database cache store.
+        // Decline early requests instead of queueing or retrying them.
+        if (! Cache::add(self::LAST_REQUEST_KEY, true, now()->addSecond())) {
+            return $this->fail('Location lookup is busy. Please try again shortly.', 429);
+        }
+
+        $appUrl = trim((string) config('app.url'));
+        $userAgent = 'KJM Coffee Shop/1.0';
+        if (filter_var($appUrl, FILTER_VALIDATE_URL) !== false) {
+            $userAgent .= ' (+'.rtrim($appUrl, '/').')';
+        }
+
+        try {
+            $response = Http::withUserAgent($userAgent)
+                ->acceptJson()
+                ->withHeaders(['Accept-Language' => 'en'])
+                ->timeout(8)
+                ->get('https://nominatim.openstreetmap.org/reverse', [
+                    'lat' => $latitude,
+                    'lon' => $longitude,
+                    'format' => 'jsonv2',
+                    'addressdetails' => 1,
+                ]);
+
+            if ($response->status() === 404) {
+                Cache::put($cacheKey, ['_no_result' => true], now()->addMinutes(5));
+
+                return $this->fail('Could not find a readable address for this pin.', 422);
             }
 
-            $findComponent = static function (array $types) use ($components): string {
-                foreach ($types as $type) {
-                    foreach ($components as $component) {
-                        if (in_array($type, $component['types'] ?? [], true)) {
-                            $value = trim((string) ($component['long_name'] ?? ''));
-                            if ($value !== '') return $value;
-                        }
+            if (! $response->successful()) {
+                logger()->warning('Nominatim reverse geocoding returned a provider error.', [
+                    'provider_status' => $response->status(),
+                ]);
+
+                return $this->fail('Location lookup is temporarily unavailable. Please try again.', 502);
+            }
+
+            $result = $response->json();
+            $address = is_array($result) && is_array($result['address'] ?? null)
+                ? $result['address']
+                : [];
+
+            $pick = static function (array $keys) use ($address): string {
+                foreach ($keys as $key) {
+                    $value = trim((string) ($address[$key] ?? ''));
+                    if ($value !== '') {
+                        return $value;
                     }
                 }
+
                 return '';
             };
-            $barangay = $findComponent([
-                'administrative_area_level_5',
-                'administrative_area_level_4',
-                'sublocality_level_1',
-                'sublocality',
-                'neighborhood',
-            ]);
-            $city = $findComponent([
-                'locality',
-                'administrative_area_level_3',
-                'administrative_area_level_2',
-            ]);
-            $province = $findComponent(['administrative_area_level_1']);
-            $country = $findComponent(['country']);
-            $streetNumber = $findComponent(['street_number']);
-            $streetName = $findComponent(['route']);
-            $street = trim(implode(' ', array_filter([$streetNumber, $streetName])));
-            $postalCode = $findComponent(['postal_code']);
-            $parts = array_values(array_unique(array_filter([
+
+            $houseNumber = $pick(['house_number']);
+            $road = $pick(['road']);
+            $street = trim(implode(' ', array_filter([$houseNumber, $road])));
+            // Only pass through Nominatim's explicit barangay component. Do not
+            // infer it from neighbourhood, suburb, or zone fields.
+            $barangay = $pick(['barangay']);
+            $city = $pick(['city', 'town', 'village', 'municipality']);
+            $province = $pick(['province', 'state']);
+            $postalCode = $pick(['postcode']);
+            $country = $pick(['country']);
+            $displayName = is_array($result)
+                ? trim((string) ($result['display_name'] ?? ''))
+                : '';
+
+            $fallbackParts = array_values(array_unique(array_filter([
+                $street,
+                $barangay,
+                $city,
+                $province,
+                $postalCode,
+                $country,
+            ], static fn ($part) => $part !== '')));
+            $formattedAddress = $displayName !== ''
+                ? $displayName
+                : implode(', ', $fallbackParts);
+
+            if ($formattedAddress === '' && $barangay === '' && $city === ''
+                && $province === '' && $street === '' && $country === '') {
+                Cache::put($cacheKey, ['_no_result' => true], now()->addMinutes(5));
+
+                return $this->fail('Could not find a readable address for this pin.', 422);
+            }
+
+            $compactParts = array_values(array_unique(array_filter([
                 $barangay,
                 $city,
                 $province,
                 $country,
             ], static fn ($part) => $part !== '')));
-            $fullAddress = implode(', ', $parts);
-            if ($fullAddress === '') $fullAddress = $formattedAddress;
+            $compactAddress = implode(', ', $compactParts);
+            if ($compactAddress === '') {
+                $compactAddress = $formattedAddress;
+            }
 
-            return $this->ok([
+            $name = trim((string) ($result['name'] ?? ''));
+            if ($name === '') {
+                $name = $barangay ?: ($city ?: ($province ?: ($street ?: $formattedAddress)));
+            }
+
+            // Keep the existing success JSON field names for Flutter callers.
+            $place = [
                 'name' => $name,
-                'address' => $fullAddress,
+                'address' => $compactAddress,
                 'formatted_address' => $formattedAddress,
                 'street' => $street,
                 'barangay' => $barangay,
@@ -145,13 +150,16 @@ class ReverseGeocodeController extends Controller
                 'province' => $province,
                 'postal_code' => $postalCode,
                 'country' => $country,
-            ]);
+            ];
+            Cache::put($cacheKey, $place, now()->addDay());
+
+            return $this->ok($place);
         } catch (\Throwable $exception) {
-            // Do not report the raw HTTP exception: its request URL may contain
-            // the Google key in the query string. Log only a safe class name.
-            logger()->warning('Google reverse geocoding request failed.', [
+            // Log only the exception class; do not log request URLs or payloads.
+            logger()->warning('Nominatim reverse geocoding request failed.', [
                 'exception_type' => get_class($exception),
             ]);
+
             return $this->fail('Location lookup timed out. You can enter the address manually.', 502);
         }
     }
