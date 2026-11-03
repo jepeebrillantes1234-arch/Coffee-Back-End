@@ -116,6 +116,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Membership and reward administration
     Route::get('memberships', [MembershipController::class, 'index'])->name('memberships.index');
+    Route::get('memberships/settings', [MembershipController::class, 'settings'])->name('memberships.settings');
+    Route::put('memberships/settings', [MembershipController::class, 'updateSettings'])->name('memberships.settings.update');
     Route::get('memberships/{membership}', [MembershipController::class, 'show'])->whereNumber('membership')->name('memberships.show');
     Route::post('memberships/{membership}/toggle', [MembershipController::class, 'toggle'])->whereNumber('membership')->name('memberships.toggle');
     Route::post('redemptions/{redemption}/claim', [MembershipController::class, 'claim'])->whereNumber('redemption')->name('redemptions.claim');

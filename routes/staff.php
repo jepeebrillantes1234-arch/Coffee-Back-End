@@ -39,6 +39,7 @@ Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')-
         Route::post('/orders/{order}/assign-available',[OrderController::class,'assignAvailable'])->name('orders.assign-available');
         Route::post('/deliveries/{delivery}/remit',[OrderController::class,'remit'])->name('deliveries.remit');
         Route::get('/pos',[PosController::class,'index'])->name('pos');
+        Route::post('/pos/membership/verify',[PosController::class,'verifyMembership'])->middleware('throttle:30,1')->name('pos.membership.verify');
         Route::post('/pos',[PosController::class,'store'])->name('pos.store');
         Route::get('/transactions',[TransactionController::class,'index'])->name('transactions');
     });

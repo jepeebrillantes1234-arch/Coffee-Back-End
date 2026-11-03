@@ -6,6 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 class MembershipPayment extends Model
 {
     protected $guarded = [];
-    protected $casts = ['amount' => 'decimal:2', 'paid_at' => 'datetime'];
+    protected $casts = ['amount' => 'decimal:2', 'paid_at' => 'datetime', 'qr_expires_at' => 'datetime'];
     public function membership() { return $this->belongsTo(Membership::class); }
 }

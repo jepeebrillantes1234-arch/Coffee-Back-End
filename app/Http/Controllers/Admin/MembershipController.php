@@ -4,11 +4,38 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Membership;
 use App\Models\RewardRedemption;
+use App\Support\Activity;
+use App\Support\Settings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class MembershipController extends Controller
 {
+    public function settings()
+    {
+        $s = Settings::all();
+        $overview = [
+            'members' => Membership::count(),
+            'active' => Membership::where('status', 'active')->count(),
+            'pending_payments' => \App\Models\MembershipPayment::where('status', 'pending')->count(),
+        ];
+        return view('admin.memberships.settings', compact('s', 'overview'));
+    }
+
+    public function updateSettings(Request $request)
+    {
+        $data = $request->validate([
+            'membership_card_price' => 'required|numeric|min:0.01|max:100000',
+            'membership_discount_percent' => 'required|numeric|min:0|max:100',
+        ]);
+        Settings::set('membership_card_price', number_format((float) $data['membership_card_price'], 2, '.', ''));
+        Settings::set('membership_discount_percent', number_format((float) $data['membership_discount_percent'], 2, '.', ''));
+        Settings::set('membership_discount_enabled', $request->boolean('membership_discount_enabled') ? '1' : '0');
+        Activity::log('update', 'membership_settings', 'Updated membership price and discount settings');
+
+        return back()->with('success', 'Membership settings saved. New prices apply to future purchases.');
+    }
+
     public function index(Request $request)
     {
         $members = Membership::with(['user:id,name,email,phone', 'payments' => fn ($q) => $q->latest('id')])

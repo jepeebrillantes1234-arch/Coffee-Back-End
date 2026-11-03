@@ -4,13 +4,46 @@ namespace App\Http\Controllers\Staff;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Order;
+use App\Models\Membership;
 use App\Models\StaffShift;
 use App\Services\CheckoutService;
+use App\Services\MembershipPricing;
 use App\Support\Activity;
 use Illuminate\Http\Request;
 
 class PosController extends Controller
 {
+    public function verifyMembership(Request $request, MembershipPricing $pricing)
+    {
+        $data = $request->validate([
+            'card_number' => 'required|string|max:24',
+        ]);
+
+        $membership = Membership::with('user:id,name')
+            ->where('member_id', strtoupper(trim($data['card_number'])))
+            ->first();
+
+        if (!$membership || !$pricing->eligible($membership)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This membership could not be verified or is not eligible for a discount.',
+            ], 422);
+        }
+
+        $configuration = $pricing->configuration();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'card_number' => $membership->member_id,
+                'member_name' => $membership->user?->name,
+                'status' => 'eligible',
+                'discount_enabled' => $configuration['discount_enabled'] && $configuration['discount_percent'] > 0,
+                'discount_percent' => $configuration['discount_enabled'] ? $configuration['discount_percent'] : 0,
+            ],
+        ]);
+    }
+
     public function index()
     {
         $categories = Category::where('is_active', true)->orderBy('sort_order')->get(['id', 'name', 'image'])

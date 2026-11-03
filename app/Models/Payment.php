@@ -8,5 +8,5 @@ class Payment extends Model
     protected $guarded = [];
     public function order() { return $this->belongsTo(Order::class); }
 
-    protected $casts = ['paid_at' => 'datetime'];
+    protected $casts = ['paid_at' => 'datetime', 'qr_expires_at' => 'datetime'];
 }

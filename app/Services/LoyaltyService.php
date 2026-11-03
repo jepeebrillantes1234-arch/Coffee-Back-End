@@ -13,6 +13,7 @@ use App\Models\LoyaltyTransaction;
 use App\Models\User;
 use App\Support\Notifier;
 use App\Support\Settings;
+use App\Services\MembershipPricing;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -40,7 +41,7 @@ class LoyaltyService
                 $payment = $membership->payments()->create([
                     'provider' => config('paymongo.mode') === 'simulated' ? 'simulated' : 'paymongo',
                     'payment_reference' => 'KJMM-' . Str::upper(Str::random(16)),
-                    'amount' => 100,
+                    'amount' => app(MembershipPricing::class)->configuration()['card_price'],
                     'status' => 'pending',
                 ]);
             }
@@ -55,46 +56,22 @@ class LoyaltyService
             }
             return [$membership, $payment];
         });
-        if ($payment->checkout_url) return $this->checkoutPayload($membership, $payment);
-
-        $base = rtrim((string) config('paymongo.public_url'), '/');
-        $key = config('paymongo.secret');
-        if (!$key) throw new RuntimeException('Online membership payment is not configured.');
-        // Reuse the same payment reference as the provider idempotency key. If a
-        // network timeout occurs, a retry retrieves the same checkout session.
-        $response = Http::withBasicAuth($key, '')
-            ->acceptJson()->asJson()->timeout(20)
-            ->withHeaders(['Idempotency-Key' => $payment->payment_reference])
-            ->post(rtrim(config('paymongo.base_url'), '/') . '/v2/checkout_sessions', ['data' => ['attributes' => [
-                'line_items' => [[
-                    'amount' => 10000,
-                    'currency' => 'PHP',
-                    'name' => 'KJM Coffee Shop Membership',
-                    'quantity' => 1,
-                ]],
-                'payment_method_types' => ['qrph'],
-                'reference_number' => $payment->payment_reference,
-                'send_email_receipt' => false,
-                'success_url' => $base . '/pay/membership/return',
-                'cancel_url' => $base . '/pay/membership/cancel',
-                'metadata' => ['membership_payment_id' => (string) $payment->id],
-            ]]]);
-        if (!$response->successful()) {
-            $payment->update(['status' => 'failed']);
-            $detail = $response->json('errors.0.detail') ?? 'Payment checkout could not be created.';
-            throw new RuntimeException('PayMongo: ' . $detail);
+        if ($payment->provider === 'simulated' || ($payment->provider_session_id && !$payment->provider_intent_id)) {
+            return $this->checkoutPayload($membership, $payment);
         }
-        $payment->update([
-            'provider_session_id' => $response->json('data.id'),
-            'checkout_url' => $response->json('data.attributes.checkout_url'),
-        ]);
-        return $this->checkoutPayload($membership->fresh(), $payment->fresh());
+
+        try {
+            $qr = app(PaymentGateway::class)->createMembershipQr($payment);
+        } catch (\Throwable $e) {
+            throw new RuntimeException('Membership QR payment could not be created. Please retry.', previous: $e);
+        }
+        return $this->checkoutPayload($membership->fresh(), $payment->fresh(), $qr);
     }
     public function verifyPayment(User $user): array
     {
         $membership = Membership::where('user_id', $user->id)->with('payments')->firstOrFail();
         $payment = $membership->payments()->latest('id')->first();
-        if ($payment && $payment->status === 'pending' && $payment->provider === 'paymongo' && $payment->provider_session_id) {
+        if ($payment && $payment->status === 'pending' && $payment->provider === 'paymongo' && $payment->provider_session_id && !$payment->provider_intent_id) {
             $key = config('paymongo.secret');
             if ($key) {
                 $response = Http::withBasicAuth($key, '')->acceptJson()->timeout(20)
@@ -137,7 +114,7 @@ class LoyaltyService
             $activated = true;
         });
         if ($activated && $userId) {
-            Notifier::send($userId, 'Membership activated', 'Your ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â±100 KJM Coffee Shop membership is active. You can now earn and redeem points.', 'membership', ['member_id' => $payment->membership?->member_id]);
+            Notifier::send($userId, 'Membership activated', 'Your KJM Coffee Shop membership is active. You can now earn and redeem points.', 'membership', ['member_id' => $payment->membership?->member_id]);
         }
     }
 
@@ -170,6 +147,9 @@ class LoyaltyService
     public function customerSummary(User $user): array
     {
         $membership = Membership::where('user_id', $user->id)->with(['payments' => fn ($q) => $q->latest('id')])->first();
+        $latestPayment = $membership?->payments->first();
+        $latestPaymentData = $latestPayment?->toArray();
+        if ($latestPaymentData !== null) unset($latestPaymentData['provider_intent_id']);
         $cardDesignActive = Settings::get('membership_card_design_active', '0') === '1';
         $frontCardPath = Settings::get('membership_card_front_design')
             ?: Settings::get('membership_card_design');
@@ -186,10 +166,15 @@ class LoyaltyService
                 'status' => $membership->status, 'active' => $membership->isActive(),
                 'points_balance' => (int) $membership->points_balance,
                 'activated_at' => $membership->activated_at, 'expires_at' => $membership->expires_at,
-                'discount' => $membership->isActive() ? 'No member discount configured' : null,
-                'latest_payment' => $membership->payments->first(),
+                'discount' => $membership->isActive() && app(MembershipPricing::class)->configuration()['discount_enabled']
+                    ? app(MembershipPricing::class)->configuration()['discount_percent'] . '% member discount on eligible products'
+                    : null,
+                'latest_payment' => $latestPaymentData,
             ] : null,
             'monthly_points' => (int) $monthly,
+            'membership_card_price' => app(MembershipPricing::class)->configuration()['card_price'],
+            'membership_discount_enabled' => app(MembershipPricing::class)->configuration()['discount_enabled'],
+            'membership_discount_percent' => app(MembershipPricing::class)->configuration()['discount_percent'],
             'transactions' => $transactions,
             // Preserve the original key for older app versions.
             'card_design_url' => $cardDesignActive && filled($frontCardPath)
@@ -346,8 +331,19 @@ class LoyaltyService
         });
     }
 
-    private function checkoutPayload(Membership $membership, MembershipPayment $payment): array
+    private function checkoutPayload(Membership $membership, MembershipPayment $payment, array $qr = []): array
     {
-        return ['membership' => $membership, 'payment' => $payment, 'checkout_url' => $payment->checkout_url];
+        $paymentData = $payment->toArray();
+        unset($paymentData['provider_intent_id']);
+        return [
+            'membership' => $membership,
+            'payment' => $paymentData,
+            'checkout_url' => $payment->checkout_url,
+            'qr_image_url' => $qr['qr_image_url'] ?? null,
+            'payment_reference' => $qr['payment_reference'] ?? $payment->payment_reference,
+            'amount' => $qr['amount'] ?? (float) $payment->amount,
+            'expires_at' => $qr['expires_at'] ?? $payment->qr_expires_at?->toIso8601String(),
+            'status' => $qr['status'] ?? $payment->status,
+        ];
     }
 }

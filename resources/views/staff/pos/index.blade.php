@@ -50,6 +50,18 @@
                 <label for="cust" class="mb-1 block text-xs font-medium text-espresso/70">Customer name (optional)</label>
                 <input id="cust" maxlength="60" placeholder="Enter customer name" class="pos-field">
             </div>
+            <div class="mt-3 rounded-xl border border-[#eadfd4] bg-[#fcf8f3] p-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div><strong class="text-sm">Membership</strong><p class="text-xs text-espresso/60">Verify a card before applying its member benefit.</p></div>
+                    <button id="scan-membership" type="button" class="rounded-lg border border-[#b98768] px-3 py-2 text-sm font-medium text-[#75401f] hover:bg-[#f6eee6]">Scan Membership QR</button>
+                </div>
+                <div class="mt-2 flex gap-2">
+                    <input id="membership-number" maxlength="24" placeholder="Enter unique Card Number" class="pos-field">
+                    <button id="verify-membership" type="button" class="rounded-lg bg-[#5a2e18] px-3 text-sm font-semibold text-white">Verify</button>
+                </div>
+                <div id="membership-result" class="mt-2 hidden rounded-lg bg-white p-2 text-sm" role="status"></div>
+                <p id="membership-error" class="mt-2 text-sm text-red-600" role="alert"></p>
+            </div>
             <div class="mt-3 flex justify-between text-sm"><span>Subtotal</span><span id="subtotal" class="font-medium">₱0.00</span></div>
             <div class="mt-2 flex justify-between text-lg font-bold"><span>Total</span><span id="total">₱0.00</span></div>
             <div class="mt-3">
@@ -76,12 +88,21 @@
         <p id="m-err" class="mt-2 text-sm text-red-600" role="alert"></p>
     </div>
 </div>
+<div id="membership-scanner" class="hidden fixed inset-0 z-[60] items-center justify-center bg-black/65 p-4" role="dialog" aria-modal="true" aria-labelledby="scanner-title">
+    <div class="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+        <div class="mb-3 flex items-center justify-between"><h3 id="scanner-title" class="text-lg font-semibold">Scan Membership QR</h3><button id="scanner-close" type="button" class="text-2xl leading-none text-espresso/60" aria-label="Close scanner">×</button></div>
+        <video id="membership-video" class="aspect-video w-full rounded-xl bg-black object-cover" autoplay muted playsinline></video>
+        <p id="scanner-message" class="mt-3 text-sm text-espresso/70" role="status">Allow camera access and hold the membership QR inside the frame.</p>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
+@vite('resources/js/staff-membership-scanner.js')
 <script>
 const CATALOG = @json($catalog);
 const PAY_URL = @json(route('staff.pos.store'));
+const MEMBERSHIP_VERIFY_URL = @json(route('staff.pos.membership.verify'));
 const CSRF = document.querySelector('meta[name="csrf-token"]').content;
 const $ = id => document.getElementById(id);
 const peso = n => '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -90,6 +111,7 @@ let cart = [];
 let activeCat = null;
 let current = null;
 let mQty = 1;
+let verifiedMembership = null;
 
 function categoryIcon(name) {
   const value = String(name).toLowerCase();
@@ -167,8 +189,43 @@ function updatePay() {
   const amount = total(), cash = Number.parseFloat($('cash').value || '0');
   $('change').textContent = peso(Math.max(0, cash - amount)); $('pay').disabled = !(cart.length && cash + 0.001 >= amount);
 }
+$('verify-membership').onclick = () => verifyMembership($('membership-number').value);
+$('membership-number').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); verifyMembership($('membership-number').value); } });
+$('membership-number').addEventListener('input', () => { if (verifiedMembership && $('membership-number').value.trim() !== verifiedMembership.card_number) clearMembership(); });
+async function verifyMembership(cardNumber) {
+  $('membership-error').textContent = '';
+  $('membership-result').classList.add('hidden');
+  const identifier = String(cardNumber || '').trim();
+  if (!identifier) { $('membership-error').textContent = 'Enter or scan a Card Number to verify membership.'; return null; }
+  $('verify-membership').disabled = true;
+  try {
+    const response = await fetch(MEMBERSHIP_VERIFY_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': CSRF }, body: JSON.stringify({ card_number: identifier }) });
+    const json = await response.json();
+    if (!response.ok || !json.success) throw new Error(json.message || 'Membership could not be verified.');
+    verifiedMembership = json.data;
+    $('membership-number').value = verifiedMembership.card_number;
+    $('membership-result').innerHTML = `<div class="flex items-start justify-between gap-2"><div><strong>${esc(verifiedMembership.member_name || 'Member')}</strong><div class="text-xs text-espresso/65">Card ${esc(verifiedMembership.card_number)} · Verified and eligible</div><div class="mt-1 text-xs font-semibold text-[#75401f]">${verifiedMembership.discount_enabled ? `Configured discount rate: ${Number(verifiedMembership.discount_percent).toLocaleString('en-PH')}%` : 'Membership verified; member discount is disabled'}</div></div><button id="remove-membership" type="button" class="text-sm font-medium text-red-600">Remove</button></div>`;
+    $('membership-result').classList.remove('hidden');
+    $('remove-membership').onclick = clearMembership;
+    return verifiedMembership;
+  } catch (error) { verifiedMembership = null; $('membership-error').textContent = error.message; return null; }
+  finally { $('verify-membership').disabled = false; }
+}
+function clearMembership() { verifiedMembership = null; $('membership-number').value = ''; $('membership-result').replaceChildren(); $('membership-result').classList.add('hidden'); $('membership-error').textContent = ''; }
+function closeMembershipScanner() { window.KjmMembershipQrScanner?.stop(); $('membership-scanner').classList.add('hidden'); $('membership-scanner').classList.remove('flex'); }
+$('scan-membership').onclick = async () => {
+  const panel = $('membership-scanner'); panel.classList.remove('hidden'); panel.classList.add('flex');
+  const message = $('scanner-message');
+  await window.KjmMembershipQrScanner?.start($('membership-video'), message, async identifier => {
+    const verified = await verifyMembership(identifier);
+    if (verified) closeMembershipScanner();
+    return Boolean(verified);
+  });
+};
+$('scanner-close').onclick = closeMembershipScanner;
+$('membership-scanner').addEventListener('click', event => { if (event.target === $('membership-scanner')) closeMembershipScanner(); });
 $('cash').addEventListener('input', updatePay);
-$('clear').onclick = () => { if (!cart.length || window.confirm('Clear all items from this order?')) { cart = []; $('cash').value = ''; $('cust').value = ''; $('msg').textContent = ''; renderCart(); } };
+$('clear').onclick = () => { if (!cart.length || window.confirm('Clear all items from this order?')) { cart = []; $('cash').value = ''; $('cust').value = ''; $('msg').textContent = ''; clearMembership(); renderCart(); } };
 $('pay').onclick = async () => {
   $('msg').textContent = ''; $('pay').disabled = true;
   try {

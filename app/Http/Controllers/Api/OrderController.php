@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Api\Concerns\Responds;
 use App\Http\Controllers\Controller;
 use App\Models\Delivery;
+use App\Models\HomePromo;
+use App\Models\Membership;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
@@ -12,6 +14,7 @@ use App\Models\PromoCode;
 use App\Models\PromoUsage;
 use App\Models\User;
 use App\Services\PaymentGateway;
+use App\Services\MembershipPricing;
 use App\Support\Geo;
 use App\Support\Notifier;
 use App\Support\Settings;
@@ -33,6 +36,8 @@ class OrderController extends Controller
         return $this->ok(['items'=>collect($quote['lines'])->map(fn($line)=>[
             'qty'=>$line['quantity'],'name'=>$line['product']->name,'line_total'=>$line['total'],
         ])->values(),'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],'discount_label'=>$quote['discount_label'],
+            'promo_discount'=>$quote['promo_discount'],'first_order_discount'=>$quote['first_order_discount'],
+            'membership_discount'=>$quote['membership_discount'],'membership_discount_percent'=>$quote['membership_discount_percent'],
             'distance_km'=>$quote['distance_km'],'delivery_fee'=>$quote['delivery_fee'],'total'=>$quote['total']]);
     }
 
@@ -40,18 +45,37 @@ class OrderController extends Controller
     {
         if (!ShopOperatingHours::isOpen()) return $this->fail('Online ordering is currently closed. Please order during the shop operating hours.', 409);
         $data=$this->validateCheckout($request,true);
+        $requestedCheckoutId = $data['checkout_request_id'] ?? null;
+        unset($data['checkout_request_id']);
         $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'qrph':'cod'):(config('shop.payment','cod')==='online'?'qrph':'cash'));
+        // Avoid changing the existing QRPh gateway/session flow; request idempotency applies to cash/COD orders.
+        $checkoutRequestId = $method === 'qrph' ? null : $requestedCheckoutId;
+        $payloadHash = hash('sha256', json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         if($method==='qrph' && (config('shop.payment','cod')!=='online' || !(bool)((int)Settings::get('payment_qrph_enabled',1)))) return $this->fail('QRPh payment is currently unavailable.');
         if($method==='qrph' && config('paymongo.mode')!=='simulated' && !filled(config('paymongo.secret'))) return $this->fail('Online payment is not configured yet. Please choose Cash on Delivery or contact the shop.',503);
         if($data['order_type']==='delivery' && $method==='cash') return $this->fail('COD o QRPh lang ang puwedeng bayad para sa delivery.');
         if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
-        $quote=null;
-        $order=DB::transaction(function()use($request,$data,$method,&$quote){
+        $quote=null;$created=false;
+        $order=DB::transaction(function()use($request,$data,$method,$checkoutRequestId,$payloadHash,&$quote,&$created){
+            if ($checkoutRequestId !== null) {
+                User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
+                $existing = Order::where('user_id', $request->user()->id)->where('checkout_request_id', $checkoutRequestId)->first();
+                if ($existing) {
+                    if (!hash_equals((string) $existing->checkout_payload_hash, $payloadHash)) {
+                        throw ValidationException::withMessages(['checkout_request_id' => 'This checkout request was already used for a different order.']);
+                    }
+                    return $existing;
+                }
+            }
             if (!ShopOperatingHours::isOpen()) throw ValidationException::withMessages(['shop' => 'Online ordering is currently closed. Please order during the shop operating hours.']);
             $quote=$this->quote($request->user(),$data,true);
             $o=Order::create(['order_number'=>'KJM-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
                 'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
-                'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],'delivery_fee'=>$quote['delivery_fee'],'total'=>$quote['total'],
+                'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],
+                'membership_discount_amount'=>$quote['membership_discount'],'membership_discount_percent'=>$quote['membership_discount_percent'],
+                'promo_discount'=>$quote['promo_discount'],'first_order_discount'=>$quote['first_order_discount'],
+                'checkout_request_id'=>$checkoutRequestId,'checkout_payload_hash'=>$checkoutRequestId === null ? null : $payloadHash,
+                'delivery_fee'=>$quote['delivery_fee'],'total'=>$quote['total'],
                 'is_first_order'=>$quote['is_first_order'],'payment_method'=>$method,'payment_status'=>'unpaid',
                 'delivery_address'=>$data['delivery_address']??null,'delivery_lat'=>$data['delivery_lat']??null,
                 'delivery_lng'=>$data['delivery_lng']??null,'notes'=>$data['notes']??null]);
@@ -63,13 +87,14 @@ class OrderController extends Controller
                 foreach($line['options'] as $option) $item->options()->create(['option_name'=>$option->name,'extra_price'=>$option->extra_price]);
             }
             DB::table('order_status_logs')->insert(['order_id'=>$o->id,'status'=>$o->status,'changed_by'=>$request->user()->id,'created_at'=>now()]);
-            if($quote['promo']) PromoUsage::create(['promo_id'=>$quote['promo']->id,'user_id'=>$request->user()->id,'order_id'=>$o->id,'discount_amount'=>$quote['promo_discount'],'used_at'=>now()]);
+            if($quote['promo'] && $quote['promo_discount'] > 0) PromoUsage::create(['promo_id'=>$quote['promo']->id,'user_id'=>$request->user()->id,'order_id'=>$o->id,'discount_amount'=>$quote['promo_discount'],'used_at'=>now()]);
             if(in_array($method,['cod','cash'],true)) Payment::create(['order_id'=>$o->id,'method'=>$method,'amount'=>$o->total,'status'=>'pending']);
+            $created=true;
             return $o;
         });
-        Notifier::order($order,$order->status);
+        if ($created) Notifier::order($order,$order->status);
         $checkout = null;
-        if ($method === 'qrph') {
+        if ($order->payment_method === 'qrph') {
             try {
                 $checkout = app(PaymentGateway::class)->createCheckout($order);
             } catch (\Throwable $e) {
@@ -106,9 +131,19 @@ class OrderController extends Controller
     {
         $o=Order::where('user_id',$request->user()->id)->findOrFail($id);
         if($o->payment_method!=='qrph') return $this->fail('COD ang bayad sa order na ito.');
+        if ($o->payment_status === 'paid') {
+            return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
+        }
+        if ($o->status !== 'awaiting_payment' || $o->payment_status !== 'unpaid') {
+            return $this->fail('This order is not awaiting an online payment.', 409);
+        }
         if (!(bool)((int)Settings::get('payment_qrph_enabled',1))) return $this->fail('QRPh payment is currently unavailable.');
         $checkout=app(PaymentGateway::class)->createCheckout($o);
-        return $this->ok(array_merge($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])), ['checkout_url'=>$checkout['url']]));
+        return $this->ok(array_merge(
+            $this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])),
+            $checkout,
+            ['checkout_url' => $checkout['url'] ?? null],
+        ));
     }
 
     public function verify(Request $request,int $id)
@@ -195,6 +230,7 @@ class OrderController extends Controller
             'items.*.quantity'=>'required|integer|min:1|max:50','items.*.option_ids'=>'nullable|array','items.*.option_ids.*'=>'integer',
             'items.*.notes'=>'nullable|string|max:255','order_type'=>($forOrder?'required':'nullable').'|in:delivery,pickup',
             'payment_method'=>'nullable|in:cod,cash,qrph','promo_code'=>'nullable|string|max:30',
+            'checkout_request_id'=>'nullable|uuid',
             'delivery_address'=>$forOrder
                 ? 'required_if:order_type,delivery|nullable|string|max:1000'
                 : 'nullable|string|max:1000',
@@ -253,8 +289,24 @@ class OrderController extends Controller
             if($promo->max_discount) $promoDiscount=min($promoDiscount,(float)$promo->max_discount);
             $promoDiscount=min($promoDiscount,$subtotal);
         }
-        $discount=(bool)((int)Settings::get('allow_promo_stacking',0))?min($subtotal,$firstDiscount+$promoDiscount):max($firstDiscount,$promoDiscount);
-        $label=$promoDiscount>$firstDiscount?($promo?->code):($firstDiscount>0?'First Order':null);
+        $allowStacking=(bool)((int)Settings::get('allow_promo_stacking',0));
+        if ($allowStacking) {
+            $appliedFirstDiscount=min($firstDiscount,$subtotal);
+            $appliedPromoDiscount=min($promoDiscount,max(0,$subtotal-$appliedFirstDiscount));
+        } elseif ($firstDiscount >= $promoDiscount) {
+            $appliedFirstDiscount=$firstDiscount;
+            $appliedPromoDiscount=0.0;
+        } else {
+            $appliedFirstDiscount=0.0;
+            $appliedPromoDiscount=$promoDiscount;
+        }
+        $discount=round($appliedFirstDiscount+$appliedPromoDiscount,2);
+        $label=$appliedPromoDiscount>0?($promo?->code):($appliedFirstDiscount>0?'First Order':null);
+        $membership = Membership::where('user_id', $user->id)->first();
+        $memberBenefit = app(MembershipPricing::class)->discountForLines($lines, $membership, $appliedPromoDiscount > 0 ? $promo : null, $appliedFirstDiscount);
+        $membershipDiscount = $memberBenefit['discount'];
+        $discount = min($subtotal, round($discount + $membershipDiscount, 2));
+        if ($membershipDiscount > 0) $label = trim(($label ? $label . ' + ' : '') . 'Member');
         $distance=0.0;$fee=0.0;
         if(($data['order_type']??'delivery')==='delivery'){
             if(isset($data['delivery_lat'],$data['delivery_lng']) && Settings::get('shop_lat')!==null && Settings::get('shop_lng')!==null){
@@ -264,7 +316,9 @@ class OrderController extends Controller
             $fee=(float)Settings::get('delivery_base_fee',30)+$distance*(float)Settings::get('delivery_fee_per_km',10);
         }
         return ['lines'=>$lines,'subtotal'=>$subtotal,'discount'=>round($discount,2),'discount_label'=>$label,'promo'=>$promo,
-            'promo_discount'=>round($promoDiscount,2),'is_first_order'=>$isFirst,'distance_km'=>$distance,'delivery_fee'=>round($fee,2),
+            'promo_discount'=>round($appliedPromoDiscount,2),'first_order_discount'=>round($appliedFirstDiscount,2),
+            'membership_discount'=>round($membershipDiscount,2),'membership_discount_percent'=>$memberBenefit['percent'],
+            'is_first_order'=>$isFirst,'distance_km'=>$distance,'delivery_fee'=>round($fee,2),
             'total'=>round(max(0,$subtotal-$discount)+$fee,2)];
     }
 
@@ -273,11 +327,20 @@ class OrderController extends Controller
         $o->loadMissing(['items.options','items.product','review','payments']);
         $payment=$o->payments->sortByDesc('id')->first();
         return ['id'=>$o->id,'order_number'=>$o->order_number,'order_type'=>$o->order_type,'status'=>$o->status,
-            'subtotal'=>(float)$o->subtotal,'discount'=>(float)$o->discount,'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,
+            'subtotal'=>(float)$o->subtotal,'discount'=>(float)$o->discount,
+            'membership_discount'=>(float)($o->membership_discount_amount ?? 0),
+            'membership_discount_percent'=>(float)($o->membership_discount_percent ?? 0),
+            'promo_discount'=>(float)($o->promo_discount ?? 0),'first_order_discount'=>(float)($o->first_order_discount ?? 0),
+            'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,
             'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'delivery_address'=>$o->delivery_address,
             'delivery_lat'=>$o->delivery_lat,'delivery_lng'=>$o->delivery_lng,'notes'=>$o->notes,'reject_reason'=>$o->reject_reason,
             'created_at'=>$o->created_at?->toIso8601String(),'checkout_url'=>$payment?->checkout_url,
-            'payment_expires_at'=>$o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
+            'payment_reference'=>$o->order_number,
+            'payment_amount'=>$payment ? (float)$payment->amount : (float)$o->total,
+            'payment_paid_at'=>$payment?->paid_at?->toIso8601String(),
+            'qr_expires_at'=>$payment?->qr_expires_at?->toIso8601String(),
+            'payment_expires_at'=>$payment?->qr_expires_at?->toIso8601String()
+                ?? $o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
             'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment'
                 && (bool)((int)Settings::get('payment_qrph_enabled',1)),
             'can_cancel'=>$o->status==='pending','has_review'=>$o->review!==null,

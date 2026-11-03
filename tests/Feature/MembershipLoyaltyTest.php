@@ -7,8 +7,10 @@ use App\Models\LoyaltyTransaction;
 use App\Models\Membership;
 use App\Models\Address;
 use App\Models\MembershipPayment;
+use App\Models\HomePromo;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\PromoCode;
 use App\Models\Reward;
 use App\Models\RewardRedemption;
 use App\Models\User;
@@ -25,6 +27,227 @@ use Tests\TestCase;
 class MembershipLoyaltyTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_admin_can_update_membership_price_and_discount_settings(): void
+    {
+        $admin = $this->user('admin');
+        $this->actingAs($admin)->get('/admin/memberships/settings')
+            ->assertOk()
+            ->assertSee('Membership Card Price');
+        $this->actingAs($admin)->put('/admin/memberships/settings', [
+            'membership_card_price' => '250.50',
+            'membership_discount_percent' => '12.5',
+            'membership_discount_enabled' => '1',
+        ])->assertRedirect();
+
+        $this->assertSame('250.50', Settings::get('membership_card_price'));
+        $this->assertSame('12.50', Settings::get('membership_discount_percent'));
+        $this->assertSame('1', Settings::get('membership_discount_enabled'));
+
+        $this->actingAs($admin)->put('/admin/memberships/settings', [
+            'membership_card_price' => '250.50',
+            'membership_discount_percent' => '100.01',
+            'membership_discount_enabled' => '1',
+        ])->assertSessionHasErrors('membership_discount_percent');
+        $this->assertSame('12.50', Settings::get('membership_discount_percent'));
+    }
+
+    public function test_future_membership_purchase_uses_new_price_and_preserves_paid_payment(): void
+    {
+        config(['paymongo.mode' => 'simulated', 'paymongo.public_url' => 'https://coffee.test']);
+        Settings::set('membership_card_price', '250');
+        $previousCustomer = $this->user('customer');
+        $previousMembership = $this->membership($previousCustomer, 'active');
+        $previousPayment = $this->payment($previousMembership);
+        $previousPayment->update(['status' => 'paid', 'paid_at' => now()]);
+
+        $futureCustomer = $this->user('customer');
+        $this->actingAs($futureCustomer, 'sanctum')
+            ->postJson('/api/v1/membership/checkout')
+            ->assertCreated()
+            ->assertJsonPath('data.payment.amount', '250.00');
+
+        $this->assertSame('100.00', $previousPayment->fresh()->amount);
+        $this->assertSame('paid', $previousPayment->fresh()->status);
+    }
+
+    public function test_active_verified_member_gets_discount_only_on_full_price_standalone_products(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $regular = $this->product();
+        $sale = $this->product();
+        $sale->update(['discount_type' => 'percent', 'discount_value' => 20, 'discount_is_active' => true]);
+
+        $payload = [
+            'order_type' => 'pickup', 'payment_method' => 'cash',
+            'items' => [
+                ['product_id' => $regular->id, 'quantity' => 1],
+                ['product_id' => $sale->id, 'quantity' => 1],
+            ],
+        ];
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.subtotal', 180)
+            ->assertJsonPath('data.membership_discount', 10)
+            ->assertJsonPath('data.membership_discount_percent', 10)
+            ->assertJsonPath('data.promo_discount', 0)
+            ->assertJsonPath('data.total', 170);
+
+        $payload['checkout_request_id'] = (string) Str::uuid();
+        $this->postJson('/api/v1/orders', $payload)->assertCreated();
+        $order = Order::where('user_id', $customer->id)->firstOrFail();
+        $this->assertSame(10.0, (float) $order->membership_discount_amount);
+        $this->assertSame(10.0, (float) $order->membership_discount_percent);
+        $this->assertSame(170.0, (float) $order->total);
+    }
+
+    public function test_inactive_or_unverified_members_do_not_get_member_discount(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $this->membership($customer, 'active'); // Active flag without a paid verification record.
+        $product = $this->product();
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', [
+                'order_type' => 'pickup', 'items' => [['product_id' => $product->id, 'quantity' => 1]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.membership_discount', 0);
+
+        $inactiveCustomer = $this->user('customer');
+        $inactive = $this->membership($inactiveCustomer, 'inactive');
+        $this->paidMembershipPayment($inactive);
+        $this->actingAs($inactiveCustomer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', [
+                'order_type' => 'pickup', 'items' => [['product_id' => $product->id, 'quantity' => 1]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.membership_discount', 0);
+    }
+
+    public function test_bogo_discount_excludes_only_free_units_from_member_discount(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $product = $this->product();
+        $promo = PromoCode::create([
+            'code' => 'TESTBOGO', 'type' => 'bogo', 'value' => 0, 'product_id' => $product->id,
+            'buy_qty' => 1, 'free_qty' => 1, 'per_user_limit' => 1, 'is_active' => true,
+            'show_in_app' => true,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', [
+                'order_type' => 'pickup', 'promo_code' => $promo->code,
+                'items' => [['product_id' => $product->id, 'quantity' => 2]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.promo_discount', 100)
+            ->assertJsonPath('data.membership_discount', 10)
+            ->assertJsonPath('data.total', 90);
+    }
+
+    public function test_member_discount_applies_to_regular_items_but_not_bundle_price(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $regular = $this->product();
+        $bundleProduct = $this->product();
+        $bundle = HomePromo::create(['name' => 'Feature Test Bundle', 'price' => 150, 'is_active' => true]);
+        $bundle->products()->attach($bundleProduct->id, ['quantity' => 2]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', [
+                'order_type' => 'pickup',
+                'items' => [['product_id' => $regular->id, 'quantity' => 1]],
+                'home_promos' => [['home_promo_id' => $bundle->id, 'quantity' => 1]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.subtotal', 250)
+            ->assertJsonPath('data.membership_discount', 10)
+            ->assertJsonPath('data.total', 240);
+    }
+
+    public function test_global_percentage_promo_is_not_stacked_with_member_discount(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $product = $this->product();
+        $promo = PromoCode::create([
+            'code' => 'TESTPERCENT', 'type' => 'percent', 'value' => 10,
+            'per_user_limit' => 1, 'is_active' => true, 'show_in_app' => true,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', [
+                'order_type' => 'pickup', 'promo_code' => $promo->code,
+                'items' => [['product_id' => $product->id, 'quantity' => 1]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.promo_discount', 10)
+            ->assertJsonPath('data.membership_discount', 0)
+            ->assertJsonPath('data.total', 90);
+    }
+
+    public function test_admin_configured_member_percentage_is_used_and_can_be_disabled(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        Settings::set('membership_discount_percent', '12.5');
+        Settings::set('membership_discount_enabled', '1');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $product = $this->product();
+        $payload = ['order_type' => 'pickup', 'items' => [['product_id' => $product->id, 'quantity' => 1]]];
+
+        $this->actingAs($customer, 'sanctum')
+            ->postJson('/api/v1/checkout/preview', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.membership_discount_percent', 12.5)
+            ->assertJsonPath('data.membership_discount', 12.5)
+            ->assertJsonPath('data.total', 87.5);
+
+        Settings::set('membership_discount_enabled', '0');
+        $this->postJson('/api/v1/checkout/preview', $payload)
+            ->assertOk()
+            ->assertJsonPath('data.membership_discount', 0)
+            ->assertJsonPath('data.total', 100);
+    }
+
+    public function test_order_checkout_request_retry_returns_same_order_and_discount_snapshot(): void
+    {
+        Settings::set('first_order_enabled', '0');
+        $customer = $this->user('customer');
+        $membership = $this->membership($customer, 'active');
+        $this->paidMembershipPayment($membership);
+        $product = $this->product();
+        $payload = [
+            'order_type' => 'pickup', 'payment_method' => 'cash', 'checkout_request_id' => (string) Str::uuid(),
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ];
+
+        $first = $this->actingAs($customer, 'sanctum')->postJson('/api/v1/orders', $payload)->assertCreated();
+        $second = $this->postJson('/api/v1/orders', $payload)->assertCreated();
+        $this->assertSame($first->json('data.order.id'), $second->json('data.order.id'));
+        $this->assertSame(1, Order::where('user_id', $customer->id)->count());
+        $this->assertSame(10.0, (float) Order::where('user_id', $customer->id)->firstOrFail()->membership_discount_amount);
+
+        $changedPayload = $payload;
+        $changedPayload['items'][0]['quantity'] = 2;
+        $this->postJson('/api/v1/orders', $changedPayload)->assertUnprocessable();
+        $this->assertSame(1, Order::where('user_id', $customer->id)->count());
+    }
 
     public function test_membership_checkout_stays_pending_until_verified_payment_of_exactly_one_hundred_pesos(): void
     {
@@ -441,21 +664,33 @@ $this->from('/admin/rewards')->delete('/admin/rewards/' . $reward->id)->assertRe
         config([
             'paymongo.mode' => 'paymongo',
             'paymongo.secret' => 'sk_test_only',
+            'paymongo.public_key' => 'pk_test_only',
             'paymongo.public_url' => 'https://coffee.test',
         ]);
-        Http::fake(['*' => Http::response([
-            'data' => [
-                'id' => 'cs_qrph_test',
-                'attributes' => ['checkout_url' => 'https://checkout.test/order'],
-            ],
-        ], 200)]);
+        Http::fake(function ($request) {
+            if (str_ends_with($request->url(), '/payment_intents')) {
+                return Http::response(['data' => ['id' => 'pi_qrph_test', 'attributes' => [
+                    'client_key' => 'pi_qrph_test_client_key', 'status' => 'awaiting_payment_method',
+                ]]], 201);
+            }
+            if (str_ends_with($request->url(), '/payment_methods')) {
+                return Http::response(['data' => ['id' => 'pm_qrph_test']], 201);
+            }
+            if (str_ends_with($request->url(), '/pi_qrph_test/attach')) {
+                return Http::response(['data' => ['attributes' => [
+                    'status' => 'awaiting_next_action',
+                    'next_action' => ['code' => ['image_url' => 'data:image/png;base64,dGVzdA==']],
+                ]]], 200);
+            }
+            return Http::response(['errors' => [['code' => 'unexpected_mock_request']]], 500);
+        });
 
         $customer = $this->user('customer');
         $order = Order::create([
             'order_number' => 'KJM-QR-' . Str::upper(Str::random(8)),
             'user_id' => $customer->id,
             'order_type' => 'pickup',
-            'status' => 'pending',
+            'status' => 'awaiting_payment',
             'subtotal' => 160,
             'total' => 160,
             'payment_method' => 'cash',
@@ -464,18 +699,20 @@ $this->from('/admin/rewards')->delete('/admin/rewards/' . $reward->id)->assertRe
 
         $result = app(PaymentGateway::class)->createCheckout($order);
 
-        $this->assertSame('https://checkout.test/order', $result['url']);
+        $this->assertSame('data:image/png;base64,dGVzdA==', $result['qr_image_url']);
+        $this->assertSame($order->order_number, $result['payment_reference']);
         $this->assertDatabaseHas('payments', [
             'order_id' => $order->id,
             'method' => 'qrph',
             'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_qrph_test',
             'status' => 'pending',
             'amount' => 160,
         ]);
         Http::assertSent(fn ($request) =>
-            str_contains($request->url(), '/v2/checkout_sessions')
-            && data_get($request->data(), 'data.attributes.payment_method_types.0') === 'qrph'
-            && data_get($request->data(), 'data.attributes.reference_number') === $order->order_number
+            str_contains($request->url(), '/v1/payment_intents')
+            && data_get($request->data(), 'data.attributes.payment_method_allowed.0') === 'qrph'
+            && data_get($request->data(), 'data.attributes.description') === 'Order ' . $order->order_number
         );
     }
 
@@ -562,6 +799,17 @@ $this->from('/admin/rewards')->delete('/admin/rewards/' . $reward->id)->assertRe
             'payment_reference' => 'KJMM-' . Str::upper(Str::random(16)),
             'amount' => 100,
             'status' => 'pending',
+        ]);
+    }
+
+    private function paidMembershipPayment(Membership $membership): MembershipPayment
+    {
+        return $membership->payments()->create([
+            'provider' => 'simulated',
+            'payment_reference' => 'KJMM-' . Str::upper(Str::random(16)),
+            'amount' => 100,
+            'status' => 'paid',
+            'paid_at' => now(),
         ]);
     }
 
