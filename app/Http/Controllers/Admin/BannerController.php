@@ -30,8 +30,8 @@ class BannerController extends Controller
         if ($request->hasFile('image')) $data['image'] = $request->file('image')->store('banners', 'public');
 
         $b = Banner::create($data);
-        Activity::log('create', 'banners', "Nagdagdag ng banner: {$b->headline}");
-        return redirect()->route('admin.banners.index')->with('success', 'Naidagdag ang banner.');
+        Activity::log('create', 'banners', "Banner created: {$b->headline}");
+        return redirect()->route('admin.banners.index')->with('success', 'Banner added successfully.');
     }
 
     public function edit(Banner $banner)
@@ -51,16 +51,16 @@ class BannerController extends Controller
         }
 
         $banner->update($data);
-        Activity::log('update', 'banners', "Ni-update ang banner: {$banner->headline}");
-        return redirect()->route('admin.banners.index')->with('success', 'Na-update ang banner.');
+        Activity::log('update', 'banners', "Banner updated: {$banner->headline}");
+        return redirect()->route('admin.banners.index')->with('success', 'Banner updated successfully.');
     }
 
     public function destroy(Banner $banner)
     {
         if ($banner->image) Storage::disk('public')->delete($banner->image);
-        Activity::log('delete', 'banners', "Binura ang banner: {$banner->headline}");
+        Activity::log('delete', 'banners', "Banner deleted: {$banner->headline}");
         $banner->delete();
-        return back()->with('success', 'Nabura ang banner.');
+        return back()->with('success', 'Banner deleted successfully.');
     }
 
     private function validated(Request $request): array

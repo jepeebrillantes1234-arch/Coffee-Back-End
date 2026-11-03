@@ -22,6 +22,7 @@ Route::prefix('v1')->group(function () {
 
     // Public
     Route::get('support/contact', [SupportContactController::class, 'show'])->middleware('throttle:30,1');
+    Route::get('shop-hours', [HomeController::class, 'operatingHours'])->middleware('throttle:60,1');
     Route::post('support/guest/conversations', [SupportChatController::class, 'startGuest'])->middleware('throttle:5,1');
     Route::get('support/guest/conversations/{uuid}', [SupportChatController::class, 'showGuest'])->middleware('throttle:60,1')->name('api.support.guest.show');
     Route::post('support/guest/conversations/{uuid}/messages', [SupportChatController::class, 'sendGuest'])->middleware('throttle:20,1');
@@ -46,19 +47,25 @@ Route::prefix('v1')->group(function () {
         Route::post('/broadcasting/auth', \Illuminate\Broadcasting\BroadcastController::class.'@authenticate');
         Route::post('notifications/device-token', [DeviceTokenController::class, 'store']);
         Route::delete('notifications/device-token', [DeviceTokenController::class, 'destroy']);
+        Route::get('notifications', [NotificationController::class, 'index']);
+        Route::post('notifications/read-all', [NotificationController::class, 'readAll']);
         Route::post('auth/logout',       [AuthController::class, 'logout']);
         Route::get('profile',            [AuthController::class, 'profile']);
         Route::put('profile',            [AuthController::class, 'updateProfile']);
         Route::delete('profile',         [AuthController::class, 'deleteAccount']);
         Route::post('profile/fcm-token', [AuthController::class, 'fcmToken']);
 
-        // ===== CUSTOMER =====
-        Route::middleware('role:customer')->group(function () {
+        // ===== CUSTOMER AND RIDER SUPPORT =====
+        Route::middleware('role:customer,rider')->group(function () {
             Route::get('support/conversation', [SupportChatController::class, 'current']);
             Route::post('support/conversations', [SupportChatController::class, 'start'])->middleware('throttle:10,1');
             Route::get('support/conversations/{conversation}', [SupportChatController::class, 'show'])->whereNumber('conversation');
             Route::post('support/conversations/{conversation}/messages', [SupportChatController::class, 'send'])->whereNumber('conversation')->middleware('throttle:20,1');
             Route::get('support/conversations/{conversation}/attachments/{message}', [SupportChatController::class, 'attachment'])->whereNumber('conversation')->name('api.support.attachment');
+        });
+
+        // ===== CUSTOMER =====
+        Route::middleware('role:customer')->group(function () {
             Route::get('app-config',        [HomeController::class, 'config']);
             Route::get('loyalty', [LoyaltyController::class, 'summary']);
             Route::post('membership/checkout', [LoyaltyController::class, 'checkout'])->middleware('throttle:5,1');
@@ -79,8 +86,6 @@ Route::prefix('v1')->group(function () {
             Route::post('favorites',                 [FavoriteController::class, 'store']);
             Route::delete('favorites/{productId}',   [FavoriteController::class, 'destroy']);
 
-            Route::get('notifications',              [NotificationController::class, 'index']);
-            Route::post('notifications/read-all',    [NotificationController::class, 'readAll']);
 
             Route::post('checkout/preview',            [OrderController::class, 'preview']);
             Route::post('orders',                      [OrderController::class, 'store'])->middleware('throttle:20,1');

@@ -166,6 +166,22 @@
   body.staff-shell[data-staff-theme=dark] .staff-settings-icon,body.staff-shell[data-staff-theme=dark] .staff-head-avatar,body.staff-shell[data-staff-theme=dark] .staff-panel-avatar{background:#383838;color:#fff}
   body.staff-shell[data-staff-theme=dark] .pos-page [class*="text-[#"]{color:#f5f5f5!important}body.staff-shell[data-staff-theme=dark] .pos-page [class*="bg-[#"]{background:#1e1e1e!important}
   body.staff-shell[data-staff-theme=dark] .bg-amber-50,body.staff-shell[data-staff-theme=dark] .bg-amber-100{background:#383838!important}
+  /* Tablet and phone use the full labeled drawer, even if desktop collapse was active before resizing. */
+  @media(max-width:1024px){
+    .staff-sidebar{width:min(280px,85vw);padding:0 14px;transform:translateX(-102%)}
+    .staff-mobile-open .staff-sidebar{transform:translateX(0)}
+    body.staff-shell.staff-collapsed .staff-sidebar{width:min(280px,85vw);padding:0 14px}
+    body.staff-shell.staff-collapsed .staff-brand{justify-content:flex-start;padding:14px 10px}
+    body.staff-shell.staff-collapsed .staff-brand>span{display:block}
+    body.staff-shell.staff-collapsed .staff-nav small{display:block;justify-content:flex-start;font-size:10px;padding:10px}
+    body.staff-shell.staff-collapsed .staff-nav a{justify-content:flex-start;font-size:13px;padding:13px 12px}
+    body.staff-shell.staff-collapsed .staff-nav .staff-nav-count{font-size:10px;padding:2px 8px;margin-left:auto}
+    body.staff-shell>header,body.staff-shell>main{margin-left:0}
+    .staff-mobile-shade{display:none;position:fixed;inset:0;background:#21150f75;z-index:35}
+    .staff-mobile-open .staff-mobile-shade{display:block}
+    body.staff-shell>header>div{padding:10px 13px}
+    .staff-head-copy{display:none}
+  }
 
 </style>
 
@@ -182,6 +198,7 @@
         ['staff.menu',         'Menu / Sold out', 'staff/menu*'],
 
         ['staff.transactions', 'Transactions', 'staff/transactions*'],
+        ['staff.shift', 'Open / Close Shift', 'staff/shift*'],
         ['staff.rewards.verify', 'Verify Rewards', 'staff/rewards/verify*'],
 
     ];
@@ -534,7 +551,7 @@
 
   document.getElementById('staffMenuButton').addEventListener('click', () => {
 
-    if (window.matchMedia('(max-width: 800px)').matches) body.classList.toggle('staff-mobile-open');
+    if (window.matchMedia('(max-width: 1024px)').matches) body.classList.toggle('staff-mobile-open');
 
     else body.classList.toggle('staff-collapsed');
 

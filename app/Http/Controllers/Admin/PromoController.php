@@ -42,8 +42,8 @@ class PromoController extends Controller
         if ($request->hasFile('image')) $data['image'] = $request->file('image')->store('promos', 'public');
 
         $promo = PromoCode::create($data);
-        Activity::log('create', 'promos', "Nagdagdag ng promo: {$promo->code}");
-        return redirect()->route('admin.promos.index')->with('success', 'Naidagdag ang promo.');
+        Activity::log('create', 'promos', "Promotion created: {$promo->code}");
+        return redirect()->route('admin.promos.index')->with('success', 'Promotion added successfully.');
     }
 
     public function edit(PromoCode $promo)
@@ -64,20 +64,20 @@ class PromoController extends Controller
         }
 
         $promo->update($data);
-        Activity::log('update', 'promos', "Ni-update ang promo: {$promo->code}");
-        return redirect()->route('admin.promos.index')->with('success', 'Na-update ang promo.');
+        Activity::log('update', 'promos', "Promotion updated: {$promo->code}");
+        return redirect()->route('admin.promos.index')->with('success', 'Promotion updated successfully.');
     }
 
     public function destroy(PromoCode $promo)
     {
         if ($promo->usages()->exists()) {
             $promo->update(['is_active' => false]);
-            return back()->with('error', 'May gumamit na ng promo na ito, kaya dini-deactivate na lang (hindi binura).');
+            return back()->with('error', 'This promotion has already been used, so it will be deactivated instead of deleted.');
         }
         if ($promo->image) Storage::disk('public')->delete($promo->image);
-        Activity::log('delete', 'promos', "Binura ang promo: {$promo->code}");
+        Activity::log('delete', 'promos', "Promotion deleted: {$promo->code}");
         $promo->delete();
-        return back()->with('success', 'Nabura ang promo.');
+        return back()->with('success', 'Promotion deleted successfully.');
     }
 
     /** Larawan at text ng awtomatikong First Order Discount banner */
@@ -103,8 +103,8 @@ class PromoController extends Controller
             Settings::set('fo_image', '');
         }
 
-        Activity::log('update', 'promos', 'Ni-update ang First Order Discount banner');
-        return back()->with('success', 'Na-save ang First Order Discount banner.');
+        Activity::log('update', 'promos', 'Updated the First Order Discount banner');
+        return back()->with('success', 'First Order Discount banner saved successfully.');
     }
 
     private function validated(Request $request, ?int $ignoreId = null): array
@@ -130,7 +130,7 @@ class PromoController extends Controller
         ]);
 
         if ($data['type'] === 'percent' && ($data['value'] ?? 0) > 100) {
-            throw ValidationException::withMessages(['value' => 'Hindi puwedeng lampas 100% ang percent.']);
+            throw ValidationException::withMessages(['value' => 'The percentage discount cannot exceed 100%.']);
         }
         unset($data['image']);
 

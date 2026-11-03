@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Staff;
 use App\Http\Controllers\Controller;
 use App\Models\Category;
 use App\Models\Order;
+use App\Models\StaffShift;
 use App\Services\CheckoutService;
 use App\Support\Activity;
 use Illuminate\Http\Request;
@@ -52,7 +53,12 @@ class PosController extends Controller
         $payload = ['items' => $data['items']];
         if (!empty($data['customer_name'])) $payload['notes'] = 'Customer: ' . $data['customer_name'];
 
-        $order = $svc->placeWalkIn($request->user(), $payload, (float) $data['cash']);
+        $shift = StaffShift::where('user_id', $request->user()->id)->where('status', 'open')->latest('id')->firstOrFail();
+        try {
+            $order = $svc->placeWalkIn($request->user(), $payload, (float) $data['cash'], $shift);
+        } catch (\DomainException $exception) {
+            return response()->json(['success' => false, 'message' => $exception->getMessage()], 422);
+        }
         Activity::log('pos', 'orders', "Walk-in {$order->order_number} (₱" . number_format($order->total, 2) . ')');
 
         return response()->json([

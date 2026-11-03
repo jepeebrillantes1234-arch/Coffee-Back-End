@@ -44,8 +44,8 @@ class UserController extends Controller
             ]);
         }
 
-        Activity::log('create', $role, "Nagdagdag ng {$role}: {$user->name}");
-        return redirect()->route('admin.users.index', $role)->with('success', 'Naidagdag ang account.');
+        Activity::log('create', $role, "Created {$role}: {$user->name}");
+        return redirect()->route('admin.users.index', $role)->with('success', 'Account added successfully.');
     }
 
     public function edit(User $user)
@@ -72,15 +72,15 @@ class UserController extends Controller
             ]);
         }
 
-        Activity::log('update', $user->role, "Ni-update ang {$user->role}: {$user->name}");
-        return redirect()->route('admin.users.index', $user->role)->with('success', 'Na-update ang account.');
+        Activity::log('update', $user->role, "Updated {$user->role}: {$user->name}");
+        return redirect()->route('admin.users.index', $user->role)->with('success', 'Account updated successfully.');
     }
 
     // Block / Unblock / Deactivate
     public function toggle(User $user)
     {
         if ($user->id === auth()->id() || $user->role === 'admin') {
-            return back()->with('error', 'Hindi puwedeng baguhin ang account na ito.');
+            return back()->with('error', 'This account cannot be changed.');
         }
 
         $user->status = $user->status === 'active' ? 'blocked' : 'active';
@@ -91,8 +91,8 @@ class UserController extends Controller
             if ($user->role === 'rider') RiderProfile::where('user_id', $user->id)->update(['is_available' => false]);
         }
 
-        Activity::log($user->status === 'active' ? 'unblock' : 'block', $user->role, "{$user->name} ay naging {$user->status}");
-        return back()->with('success', "Ang account ay {$user->status} na.");
+        Activity::log($user->status === 'active' ? 'unblock' : 'block', $user->role, "{$user->name}'s account status changed to {$user->status}");
+        return back()->with('success', "Account status updated to {$user->status}.");
     }
 
     // Rider approval
@@ -104,8 +104,8 @@ class UserController extends Controller
         if (!$profile->is_approved) $profile->is_available = false;
         $profile->save();
 
-        Activity::log('approve', 'rider', $user->name . ($profile->is_approved ? ' ay naaprubahan' : ' ay na-unapprove'));
-        return back()->with('success', $profile->is_approved ? 'Naaprubahan ang rider.' : 'Na-unapprove ang rider.');
+        Activity::log('approve', 'rider', $user->name . ($profile->is_approved ? ' was approved' : ' approval was revoked'));
+        return back()->with('success', $profile->is_approved ? 'Rider approved successfully.' : 'Rider approval revoked.');
     }
 
     private function rules(string $role, ?User $user = null): array

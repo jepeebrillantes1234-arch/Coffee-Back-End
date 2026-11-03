@@ -16,6 +16,7 @@ class User extends Authenticatable
     public function riderProfile() { return $this->hasOne(RiderProfile::class); }
     public function orders()       { return $this->hasMany(Order::class); }
     public function deliveries()   { return $this->hasMany(Delivery::class, 'rider_id'); }
+    public function staffShifts()  { return $this->hasMany(StaffShift::class); }
 
     public function isRole(string $r): bool { return $this->role === $r; }
 }

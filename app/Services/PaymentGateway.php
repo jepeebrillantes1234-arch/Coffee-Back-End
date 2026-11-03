@@ -127,8 +127,8 @@ class PaymentGateway
         $fresh = $order->fresh();
         if ($late) {
             try { $this->refundOrder($fresh); } catch (\Throwable $e) { report($e); }
-        } elseif ($moved) {
-            Notifier::order($fresh, 'pending');
+        } elseif ($accepted) {
+            Notifier::paymentConfirmed($fresh);
         }
         return $accepted;
     }
@@ -160,9 +160,13 @@ class PaymentGateway
     {
         $p->update(['status' => 'refunded']);
         $order->update(['payment_status' => 'refunded']);
-        Notifier::send($order->user_id, 'Na-refund ang bayad ðŸ’¸',
-            'Ibabalik ang â‚±' . number_format($p->amount, 2) . ' sa QRPh mo para sa ' . $order->order_number . '.',
-            'refund', ['order_id' => $order->id]);
+        Notifier::send($order->user_id, 'Refund status updated',
+            'A refund for your order has been processed. Open Order Details for the latest information.',
+            'refund', [
+                'order_id' => (string) $order->id,
+                'status' => 'refunded',
+                'payment_status' => 'refunded',
+            ]);
     }
 
     // ---------------- SIMULATED (pagsubok lang) ----------------

@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\Category;
 use App\Models\Delivery;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\OrderItemOption;
+use App\Models\Product;
 use App\Models\RiderProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -68,6 +72,30 @@ class OrderTrackingRoutingTest extends TestCase
         [$customer, $order] = $this->deliveryOrder();
         $delivery = $order->delivery;
         $assignedRider = $delivery->rider;
+        $customer->update(['phone' => '09171234567', 'avatar' => 'avatars/customer-test.jpg']);
+        $order->update(['delivery_fee' => 30, 'notes' => 'Please call on arrival.']);
+        $category = Category::create(['name' => 'Rider details test category']);
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'Test Product',
+            'base_price' => 40,
+            'image' => 'products/rider-details-test.jpg',
+        ]);
+        $item = OrderItem::create([
+            'order_id' => $order->id,
+            'product_id' => $product->id,
+            'product_name' => 'Order Snapshot Product',
+            'quantity' => 2,
+            'unit_price' => 40,
+            'total_price' => 80,
+            'notes' => 'Less sugar, please.',
+        ]);
+        OrderItemOption::create([
+            'order_item_id' => $item->id,
+            'option_name' => 'Large',
+            'extra_price' => 0,
+        ]);
+        $order->refresh();
         $otherRider = $this->user('rider');
         DB::table('rider_locations')->insert([
             'delivery_id' => $delivery->id,
@@ -86,7 +114,28 @@ class OrderTrackingRoutingTest extends TestCase
             ->assertJsonPath('data.route.points.0.lat', 15.95)
             ->assertJsonPath('data.route.points.0.lng', 120.53)
             ->assertJsonPath('data.route.points.2.lat', 15.96)
-            ->assertJsonPath('data.route.points.2.lng', 120.54);
+            ->assertJsonPath('data.route.points.2.lng', 120.54)
+            ->assertJsonPath('data.customer.name', $customer->name)
+            ->assertJsonPath('data.customer.phone', '09171234567')
+            ->assertJsonPath('data.customer.avatar_url', asset('storage/avatars/customer-test.jpg'))
+            ->assertJsonPath('data.order.order_number', $order->order_number)
+            ->assertJsonPath('data.order.created_at', $order->created_at->toIso8601String())
+            ->assertJsonPath('data.order.subtotal', 100)
+            ->assertJsonPath('data.order.delivery_fee', 30)
+            ->assertJsonPath('data.order.total', 130)
+            ->assertJsonPath('data.order.payment_method', 'cod')
+            ->assertJsonPath('data.order.payment_status', 'unpaid')
+            ->assertJsonPath('data.order.address', 'Customer delivery address')
+            ->assertJsonPath('data.order.lat', $order->delivery_lat)
+            ->assertJsonPath('data.order.lng', $order->delivery_lng)
+            ->assertJsonPath('data.order.notes', 'Please call on arrival.')
+            ->assertJsonPath('data.order.items.0.name', 'Order Snapshot Product')
+            ->assertJsonPath('data.order.items.0.qty', 2)
+            ->assertJsonPath('data.order.items.0.options.0', 'Large')
+            ->assertJsonPath('data.order.items.0.unit_price', 40)
+            ->assertJsonPath('data.order.items.0.total_price', 80)
+            ->assertJsonPath('data.order.items.0.notes', 'Less sugar, please.')
+            ->assertJsonPath('data.order.items.0.image_url', asset('storage/products/rider-details-test.jpg'));
 
         Http::assertSentCount(1);
 
@@ -98,6 +147,16 @@ class OrderTrackingRoutingTest extends TestCase
             ->assertJsonPath('data.route.points', []);
         Http::assertSentCount(1);
     }
+    public function test_rider_cannot_access_another_riders_delivery_details(): void
+    {
+        [, $order] = $this->deliveryOrder();
+        $otherRider = $this->user('rider');
+
+        $this->actingAs($otherRider, 'sanctum')
+            ->getJson("/api/v1/rider/deliveries/{$order->delivery->id}")
+            ->assertNotFound();
+    }
+
     public function test_route_failure_returns_last_valid_route_and_a_safe_status_message(): void
     {
         Cache::flush();
@@ -135,6 +194,74 @@ class OrderTrackingRoutingTest extends TestCase
         $this->actingAs($otherCustomer, 'sanctum')
             ->getJson("/api/v1/orders/{$order->id}/tracking")
             ->assertNotFound();
+    }
+
+    public function test_stale_rider_gps_is_not_returned_or_used_as_a_route_origin(): void
+    {
+        Cache::flush();
+        config(['services.routing.provider' => 'osrm', 'services.routing.osrm_base_url' => 'https://router.project-osrm.org']);
+        Http::fake();
+        [$customer, $order] = $this->deliveryOrder();
+        DB::table('rider_locations')->where('delivery_id', $order->delivery->id)->update([
+            'recorded_at' => now()->subSeconds(31),
+        ]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/v1/orders/{$order->id}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.rider.lat', null)
+            ->assertJsonPath('data.rider.lng', null)
+            ->assertJsonPath('data.route.status', 'unavailable')
+            ->assertJsonPath('data.route.points', []);
+
+        Http::assertNothingSent();
+    }
+
+    public function test_rider_location_endpoint_saves_the_active_delivery_gps_and_rejects_terminal_orders(): void
+    {
+        Cache::flush();
+        config(['services.routing.provider' => 'osrm', 'services.routing.osrm_base_url' => 'https://router.project-osrm.org']);
+        Http::fake(['router.project-osrm.org/route/v1/driving/*' => Http::response($this->osrmSuccess(), 200)]);
+        [$customer, $order] = $this->deliveryOrder();
+        $rider = $order->delivery->rider;
+
+        $this->actingAs($rider, 'sanctum')
+            ->postJson('/api/v1/rider/location', [
+                'delivery_id' => $order->delivery->id,
+                'latitude' => 15.955,
+                'longitude' => 120.535,
+                'speed' => 12,
+            ])
+            ->assertOk();
+
+        $this->assertDatabaseHas('rider_locations', [
+            'delivery_id' => $order->delivery->id,
+            'rider_id' => $rider->id,
+            'latitude' => 15.955,
+            'longitude' => 120.535,
+        ]);
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson("/api/v1/orders/{$order->id}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.rider.lat', 15.955)
+            ->assertJsonPath('data.rider.lng', 120.535)
+            ->assertJsonPath('data.route.origin.lat', 15.955)
+            ->assertJsonPath('data.route.origin.lng', 120.535);
+
+        $order->update(['status' => 'cancelled']);
+        $this->actingAs($rider, 'sanctum')->postJson('/api/v1/rider/location', [
+            'delivery_id' => $order->delivery->id,
+            'latitude' => 15.956,
+            'longitude' => 120.536,
+        ])->assertNotFound();
+
+        $this->assertDatabaseMissing('rider_locations', [
+            'delivery_id' => $order->delivery->id,
+            'rider_id' => $rider->id,
+            'latitude' => 15.956,
+            'longitude' => 120.536,
+        ]);
     }
 
     public function test_final_orders_return_no_live_rider_or_osrm_route(): void

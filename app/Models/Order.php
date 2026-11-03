@@ -14,6 +14,7 @@ class Order extends Model
 
     public function user()     { return $this->belongsTo(User::class); }
     public function staff()    { return $this->belongsTo(User::class, 'staff_id'); }
+    public function staffShift() { return $this->belongsTo(StaffShift::class); }
     public function items()    { return $this->hasMany(OrderItem::class); }
     public function delivery() { return $this->hasOne(Delivery::class); }
     public function payments() { return $this->hasMany(Payment::class); }

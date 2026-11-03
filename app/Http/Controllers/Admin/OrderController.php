@@ -138,40 +138,40 @@ class OrderController extends Controller
 
     public function confirm(Order $order, OrderWorkflow $wf)
     {
-        return $this->run($order, fn () => $wf->confirm($order), 'confirm', 'Nakumpirma ang order.');
+        return $this->run($order, fn () => $wf->confirm($order), 'confirm', 'Order confirmed.');
     }
 
     public function preparing(Order $order, OrderWorkflow $wf)
     {
-        return $this->run($order, fn () => $wf->preparing($order), 'preparing', 'Inihahanda na ang order.');
+        return $this->run($order, fn () => $wf->preparing($order), 'preparing', 'Order is being prepared.');
     }
 
     public function ready(Order $order, OrderWorkflow $wf)
     {
-        return $this->run($order, fn () => $wf->ready($order), 'ready', 'Handa na ang order.');
+        return $this->run($order, fn () => $wf->ready($order), 'ready', 'Order is ready.');
     }
 
     public function complete(Order $order, OrderWorkflow $wf)
     {
-        return $this->run($order, fn () => $wf->complete($order), 'complete', 'Tapos na ang order.');
+        return $this->run($order, fn () => $wf->complete($order), 'complete', 'Order completed.');
     }
 
     public function reject(Request $request, Order $order, OrderWorkflow $wf)
     {
         $request->validate(['reason' => 'required|string|max:255']);
-        return $this->run($order, fn () => $wf->reject($order, $request->reason), 'reject', 'Tinanggihan ang order.');
+        return $this->run($order, fn () => $wf->reject($order, $request->reason), 'reject', 'Order rejected.');
     }
 
     public function assign(Request $request, Order $order, OrderWorkflow $wf)
     {
         $request->validate(['rider_id' => 'required|integer|exists:users,id']);
-        return $this->run($order, fn () => $wf->assignRider($order, (int) $request->rider_id), 'assign-rider', 'Na-assign ang rider.');
+        return $this->run($order, fn () => $wf->assignRider($order, (int) $request->rider_id), 'assign-rider', 'Rider assigned.');
     }
 
     public function cancel(Request $request, Order $order, OrderWorkflow $wf)
     {
         $request->validate(['reason' => 'required|string|max:255']);
-        return $this->run($order, fn () => $wf->cancel($order, $request->reason), 'cancel', 'Na-cancel ang order.');
+        return $this->run($order, fn () => $wf->cancel($order, $request->reason), 'cancel', 'Order cancelled.');
     }
 
     private function run(Order $order, \Closure $fn, string $action, string $okMsg)

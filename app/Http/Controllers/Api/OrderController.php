@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\Responds;
 use App\Http\Controllers\Controller;
+use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\Product;
@@ -14,6 +15,7 @@ use App\Services\PaymentGateway;
 use App\Support\Geo;
 use App\Support\Notifier;
 use App\Support\Settings;
+use App\Support\ShopOperatingHours;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -25,6 +27,7 @@ class OrderController extends Controller
 
     public function preview(Request $request)
     {
+        if (!ShopOperatingHours::isOpen()) return $this->fail('Online ordering is currently closed. Please order during the shop operating hours.', 409);
         $data=$this->validateCheckout($request,false);
         $quote=$this->quote($request->user(),$data);
         return $this->ok(['items'=>collect($quote['lines'])->map(fn($line)=>[
@@ -35,6 +38,7 @@ class OrderController extends Controller
 
     public function store(Request $request)
     {
+        if (!ShopOperatingHours::isOpen()) return $this->fail('Online ordering is currently closed. Please order during the shop operating hours.', 409);
         $data=$this->validateCheckout($request,true);
         $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'qrph':'cod'):(config('shop.payment','cod')==='online'?'qrph':'cash'));
         if($method==='qrph' && (config('shop.payment','cod')!=='online' || !(bool)((int)Settings::get('payment_qrph_enabled',1)))) return $this->fail('QRPh payment is currently unavailable.');
@@ -43,6 +47,7 @@ class OrderController extends Controller
         if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
         $quote=null;
         $order=DB::transaction(function()use($request,$data,$method,&$quote){
+            if (!ShopOperatingHours::isOpen()) throw ValidationException::withMessages(['shop' => 'Online ordering is currently closed. Please order during the shop operating hours.']);
             $quote=$this->quote($request->user(),$data,true);
             $o=Order::create(['order_number'=>'KJM-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
                 'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
@@ -132,6 +137,12 @@ class OrderController extends Controller
             return $this->fail($error->getMessage(),409);
         }
         Notifier::order($o,'cancelled');
+        $delivery = Delivery::with(['rider.riderProfile', 'order'])
+            ->where('order_id', $o->id)
+            ->whereNotNull('rider_id')
+            ->whereIn('status', ['assigned', 'accepted', 'picked_up', 'on_the_way'])
+            ->first();
+        if ($delivery) Notifier::delivery($delivery, 'cancelled');
         return $this->ok($this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])));
     }
 
@@ -145,6 +156,9 @@ class OrderController extends Controller
         $latestLocation=null;
         if(!$finished && $delivery && $delivery->rider && in_array($delivery->status,['accepted','picked_up','on_the_way','out_for_delivery'],true)){
             $latestLocation=DB::table('rider_locations')->where('delivery_id',$delivery->id)->where('rider_id',$delivery->rider_id)->orderByDesc('recorded_at')->orderByDesc('id')->first();
+            if ($latestLocation && \Illuminate\Support\Carbon::parse($latestLocation->recorded_at)->lt(now()->subSeconds(30))) {
+                $latestLocation = null;
+            }
             if($rider && $latestLocation){
                 $rider['lat']=(float)$latestLocation->latitude;
                 $rider['lng']=(float)$latestLocation->longitude;

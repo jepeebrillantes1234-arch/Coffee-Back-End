@@ -35,9 +35,9 @@ class ProductController extends Controller
         if ($request->hasFile('image')) $data['image'] = $request->file('image')->store('products', 'public');
 
         $p = Product::create($data);
-        $this->log('create', "Nagdagdag ng product: {$p->name}");
+        $this->log('create', "Product created: {$p->name}");
 
-        return redirect()->route('admin.products.index')->with('success', 'Naidagdag ang product.');
+        return redirect()->route('admin.products.index')->with('success', 'Product added successfully.');
     }
 
     public function edit(Product $product)
@@ -57,18 +57,18 @@ class ProductController extends Controller
         }
 
         $product->update($data);
-        $this->log('update', "Ni-update ang product: {$product->name}");
+        $this->log('update', "Product updated: {$product->name}");
 
-        return redirect()->route('admin.products.index')->with('success', 'Na-update ang product.');
+        return redirect()->route('admin.products.index')->with('success', 'Product updated successfully.');
     }
 
     public function destroy(Product $product)
     {
         if ($product->image) Storage::disk('public')->delete($product->image);
-        $this->log('delete', "Binura ang product: {$product->name}");
+        $this->log('delete', "Product deleted: {$product->name}");
         $product->delete();
 
-        return back()->with('success', 'Nabura ang product.');
+        return back()->with('success', 'Product deleted successfully.');
     }
 
     private function validated(Request $request): array

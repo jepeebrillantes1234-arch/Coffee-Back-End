@@ -7,11 +7,16 @@ use App\Http\Controllers\Staff\ProductController;
 use App\Http\Controllers\Staff\TransactionController;
 use App\Http\Controllers\Staff\RewardRedemptionController;
 use App\Http\Controllers\Staff\SupportController;
+use App\Http\Controllers\Staff\ShiftController;
+use App\Http\Middleware\EnsureActiveStaffShift;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
+    Route::get('/shift', [ShiftController::class, 'show'])->name('shift');
+    Route::post('/shift/open', [ShiftController::class, 'open'])->name('shift.open');
+    Route::post('/shift/{shift}/close', [ShiftController::class, 'close'])->whereNumber('shift')->name('shift.close');
+    Route::get('/shift/{shift}/report', [ShiftController::class, 'report'])->whereNumber('shift')->name('shift.report');
     Route::get('/',fn()=>redirect()->route('staff.orders'))->name('home');
-    Route::get('/orders',[OrderController::class,'index'])->name('orders');
     Route::get('/profile',[ProfileController::class,'edit'])->name('profile.edit');
     Route::put('/profile',[ProfileController::class,'update'])->name('profile.update');
     Route::put('/profile/password',[ProfileController::class,'updatePassword'])->name('profile.password');
@@ -19,18 +24,22 @@ Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')-
     Route::get('/support',[SupportController::class,'index'])->name('support');
     Route::post('/support',[SupportController::class,'send'])->name('support.send')->middleware('throttle:20,1');
     Route::get('/support/{conversation}/poll',[SupportController::class,'poll'])->name('support.poll');
-    Route::get('/orders/partial',[OrderController::class,'partial'])->name('orders.partial');
-    Route::get('/orders/count',[OrderController::class,'count'])->name('orders.count');
-    Route::get('/orders/alerts',[OrderController::class,'alerts'])->name('orders.alerts');
-    Route::post('/orders/{order}/advance',[OrderController::class,'advance'])->name('orders.advance');
-    Route::post('/orders/{order}/assign-available',[OrderController::class,'assignAvailable'])->name('orders.assign-available');
-    Route::post('/deliveries/{delivery}/remit',[OrderController::class,'remit'])->name('deliveries.remit');
-    Route::get('/pos',[PosController::class,'index'])->name('pos');
-    Route::post('/pos',[PosController::class,'store'])->name('pos.store');
     Route::get('/pos/{order}/receipt',[PosController::class,'receipt'])->name('pos.receipt');
     Route::get('/menu',[ProductController::class,'index'])->name('menu');
     Route::post('/menu/{product}/toggle',[ProductController::class,'toggle'])->name('menu.toggle');
-    Route::get('/transactions',[TransactionController::class,'index'])->name('transactions');
     Route::get('/rewards/verify',[RewardRedemptionController::class,'index'])->name('rewards.verify');
     Route::post('/rewards/verify',[RewardRedemptionController::class,'claim'])->name('rewards.claim');
+
+    Route::middleware(EnsureActiveStaffShift::class)->group(function () {
+        Route::get('/orders',[OrderController::class,'index'])->name('orders');
+        Route::get('/orders/partial',[OrderController::class,'partial'])->name('orders.partial');
+        Route::get('/orders/count',[OrderController::class,'count'])->name('orders.count');
+        Route::get('/orders/alerts',[OrderController::class,'alerts'])->name('orders.alerts');
+        Route::post('/orders/{order}/advance',[OrderController::class,'advance'])->name('orders.advance');
+        Route::post('/orders/{order}/assign-available',[OrderController::class,'assignAvailable'])->name('orders.assign-available');
+        Route::post('/deliveries/{delivery}/remit',[OrderController::class,'remit'])->name('deliveries.remit');
+        Route::get('/pos',[PosController::class,'index'])->name('pos');
+        Route::post('/pos',[PosController::class,'store'])->name('pos.store');
+        Route::get('/transactions',[TransactionController::class,'index'])->name('transactions');
+    });
 });

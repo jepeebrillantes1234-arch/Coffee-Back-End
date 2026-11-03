@@ -20,6 +20,6 @@ class ProductController extends Controller
         $product->update(['is_available' => !$product->is_available]);
         Activity::log('availability', 'products', "{$product->name}: " . ($product->is_available ? 'available' : 'sold out'));
 
-        return back()->with('success', "{$product->name} ay " . ($product->is_available ? 'available na ulit.' : 'sold out na.'));
+        return back()->with('success', "{$product->name} is " . ($product->is_available ? 'available again.' : 'marked as sold out.'));
     }
 }

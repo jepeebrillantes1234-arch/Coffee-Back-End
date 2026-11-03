@@ -22,16 +22,16 @@ class ReviewController extends Controller
     {
         $review->update(['is_visible' => !$review->is_visible]);
         $this->recalc($review);
-        Activity::log('review', 'reviews', ($review->is_visible ? 'Ipinakita' : 'Itinago') . " ang review #{$review->id}");
-        return back()->with('success', $review->is_visible ? 'Nakikita na ang review.' : 'Itinago ang review.');
+        Activity::log('review', 'reviews', ($review->is_visible ? 'Displayed' : 'Hidden') . " review #{$review->id}");
+        return back()->with('success', $review->is_visible ? 'Review is now visible.' : 'Review hidden successfully.');
     }
 
     public function reply(Request $request, Review $review)
     {
         $request->validate(['admin_reply' => 'nullable|string|max:1000']);
         $review->update(['admin_reply' => $request->admin_reply]);
-        Activity::log('reply', 'reviews', "Sumagot sa review #{$review->id}");
-        return back()->with('success', 'Na-save ang sagot.');
+        Activity::log('reply', 'reviews', "Replied to review #{$review->id}");
+        return back()->with('success', 'Reply saved successfully.');
     }
 
     private function recalc(Review $review): void

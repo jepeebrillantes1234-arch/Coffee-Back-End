@@ -26,9 +26,9 @@ class CategoryController extends Controller
         if ($request->hasFile('image')) $data['image'] = $request->file('image')->store('categories', 'public');
 
         $cat = Category::create($data);
-        $this->log('create', "Nagdagdag ng category: {$cat->name}");
+        $this->log('create', "Category created: {$cat->name}");
 
-        return redirect()->route('admin.categories.index')->with('success', 'Naidagdag ang category.');
+        return redirect()->route('admin.categories.index')->with('success', 'Category added successfully.');
     }
 
     public function edit(Category $category)
@@ -45,21 +45,21 @@ class CategoryController extends Controller
         }
 
         $category->update($data);
-        $this->log('update', "Ni-update ang category: {$category->name}");
+        $this->log('update', "Category updated: {$category->name}");
 
-        return redirect()->route('admin.categories.index')->with('success', 'Na-update ang category.');
+        return redirect()->route('admin.categories.index')->with('success', 'Category updated successfully.');
     }
 
     public function destroy(Category $category)
     {
         if ($category->products()->exists()) {
-            return back()->with('error', 'May mga product pa ang category na ito. Ilipat o burahin muna ang mga iyon.');
+            return back()->with('error', 'This category still has products. Move or delete them before deleting the category.');
         }
         if ($category->image) Storage::disk('public')->delete($category->image);
-        $this->log('delete', "Binura ang category: {$category->name}");
+        $this->log('delete', "Category deleted: {$category->name}");
         $category->delete();
 
-        return back()->with('success', 'Nabura ang category.');
+        return back()->with('success', 'Category deleted successfully.');
     }
 
     private function validated(Request $request): array

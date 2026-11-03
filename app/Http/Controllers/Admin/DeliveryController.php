@@ -40,7 +40,7 @@ class DeliveryController extends Controller
 
     public function remit(Request $request,Delivery $delivery)
     {
-        if(!$delivery->cash_collected_at || $delivery->cash_remitted_at) return back()->with('error','Walang bagong COD cash na kailangang i-remit.');
+        if(!$delivery->cash_collected_at || $delivery->cash_remitted_at) return back()->with('error','There is no new COD cash to remit.');
         DB::transaction(function()use($request,$delivery){
             $delivery->update(['cash_remitted_at'=>now(),'cash_remitted_by'=>$request->user()->id]);
             $order=$delivery->order;
@@ -50,6 +50,6 @@ class DeliveryController extends Controller
                 \App\Support\Notifier::order($order->fresh(),'completed');
             }
         });
-        return back()->with('success','Naitala ang remittance at nakumpleto ang order.');
+        return back()->with('success','Remittance recorded and order completed.');
     }
 }

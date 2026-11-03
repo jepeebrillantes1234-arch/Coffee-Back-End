@@ -19,6 +19,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReviewController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Auth\WebLoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
 use Illuminate\Support\Facades\Route;
@@ -82,6 +83,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::delete('home-promos/{homePromo}', [HomePromoController::class, 'destroy'])->name('home-promos.destroy');
     Route::get('settings',  [SettingsController::class, 'edit'])->name('settings.edit');
     Route::put('settings',  [SettingsController::class, 'update'])->name('settings.update');
+    Route::get('shifts', [StaffShiftController::class, 'index'])->name('shifts.index');
+    Route::get('shifts/{shift}/report', [StaffShiftController::class, 'report'])->whereNumber('shift')->name('shifts.report');
 
     // Customers / Staff / Riders
     $roles = ['customer', 'staff', 'rider'];

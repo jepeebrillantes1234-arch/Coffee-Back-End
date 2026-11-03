@@ -42,7 +42,7 @@ class ReportController extends Controller
                     ->selectRaw('DATE(created_at) as d, COUNT(*) as n, SUM(subtotal) as sub, SUM(discount) as disc, SUM(delivery_fee) as fee, SUM(total) as total')
                     ->groupByRaw('DATE(created_at)')->orderByRaw('DATE(created_at)')->get()
                     ->map(fn ($r) => [$r->d, $r->n, $m($r->sub), $m($r->disc), $m($r->fee), $m($r->total)])->all();
-                return ['Sales Report', ['Petsa', 'Orders', 'Subtotal', 'Discount', 'Delivery Fee', 'Total'], $rows];
+                return ['Sales Report', ['Date', 'Orders', 'Subtotal', 'Discount', 'Delivery Fee', 'Total'], $rows];
 
             case 'products':
                 $rows = DB::table('order_items as oi')->join('orders as o', 'o.id', '=', 'oi.order_id')
@@ -51,7 +51,7 @@ class ReportController extends Controller
                     ->selectRaw('oi.product_name, SUM(oi.quantity) as qty, SUM(oi.total_price) as revenue')
                     ->groupBy('oi.product_name')->orderByDesc('qty')->get()
                     ->map(fn ($r) => [$r->product_name, $r->qty, $m($r->revenue)])->all();
-                return ['Product Report', ['Product', 'Naibenta (qty)', 'Kita'], $rows];
+                return ['Product Report', ['Product', 'Quantity Sold', 'Revenue'], $rows];
 
             case 'riders':
                 $rows = DB::table('deliveries as d')->join('users as u', 'u.id', '=', 'd.rider_id')
@@ -60,7 +60,7 @@ class ReportController extends Controller
                     ->selectRaw('u.name, COUNT(*) as trips, SUM(COALESCE(d.distance_km,0)) as km')
                     ->groupBy('u.id', 'u.name')->orderByDesc('trips')->get()
                     ->map(fn ($r) => [$r->name, $r->trips, $m($r->km)])->all();
-                return ['Rider Report', ['Rider', 'Delivered na trips', 'Kabuuang km'], $rows];
+                return ['Rider Report', ['Rider', 'Deliveries Completed', 'Total Distance (km)'], $rows];
 
             default:
                 $rows = DB::table('orders as o')->join('users as u', 'u.id', '=', 'o.user_id')
@@ -69,7 +69,7 @@ class ReportController extends Controller
                     ->selectRaw('u.name, u.email, COUNT(*) as n, SUM(o.total) as spent')
                     ->groupBy('u.id', 'u.name', 'u.email')->orderByDesc('spent')->get()
                     ->map(fn ($r) => [$r->name, $r->email, $r->n, $m($r->spent)])->all();
-                return ['Customer Report', ['Customer', 'Email', 'Orders', 'Nagastos'], $rows];
+                return ['Customer Report', ['Customer', 'Email', 'Orders', 'Total Spent'], $rows];
         }
     }
 }

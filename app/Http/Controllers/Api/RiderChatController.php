@@ -9,6 +9,7 @@ use App\Models\Delivery;
 use App\Models\DeliveryChatConversation;
 use App\Models\DeliveryChatMessage;
 use App\Models\Order;
+use App\Support\Notifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -87,6 +88,10 @@ class RiderChatController extends Controller
         });
 
         [$savedMessage, $conversation] = $message;
+        if ((int) $request->user()->id === (int) $delivery->rider_id) {
+            Notifier::riderChat($delivery->fresh(['order']), $savedMessage->load('conversation'));
+        }
+
         $peerId = (int) $request->user()->id === (int) $delivery->rider_id
             ? (int) $delivery->order->user_id
             : (int) $delivery->rider_id;

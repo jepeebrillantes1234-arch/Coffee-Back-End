@@ -25,6 +25,8 @@ class SettingsController extends Controller
             'delivery_fee_per_km' => 'required|numeric|min:0',
             'delivery_radius_km'  => 'required|numeric|min:1',
             'auto_cancel_minutes' => 'required|integer|min:1|max:120',
+            'shop_opening_time' => 'sometimes|required|date_format:H:i',
+            'shop_closing_time' => 'sometimes|required|date_format:H:i',
             'support_name' => 'nullable|string|max:120',
             'support_phone' => 'nullable|string|max:30',
             'support_email' => 'nullable|email|max:255',
@@ -71,7 +73,7 @@ class SettingsController extends Controller
             Storage::disk('public')->delete($previousBack);
         }
 
-        Activity::log('update', 'settings', 'Updated first order, delivery, and membership card settings');
+        Activity::log('update', 'settings', 'Updated shop hours, first order, delivery, and membership card settings');
         return back()->with('success', 'Settings saved.');
     }
 }

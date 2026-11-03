@@ -19,10 +19,10 @@ class ProductOptionController extends Controller
     public function preset(Request $request, Product $product)
     {
         if ($product->optionGroups()->exists()) {
-            return back()->with('error', 'May options na ang product. Burahin muna ang mga group kung gusto mong gamitin ang preset.');
+            return back()->with('error', 'This product already has options. Delete the existing groups before applying the preset.');
         }
         OptionPresets::apply($product, $request->boolean('iced'));
-        return back()->with('success', 'Nailagay ang standard coffee options.');
+        return back()->with('success', 'Standard coffee options applied successfully.');
     }
 
     public function storeGroup(Request $request, Product $product)
@@ -40,13 +40,13 @@ class ProductOptionController extends Controller
             'max_select'  => $multiple ? ($data['max_select'] ?? 3) : 1,
         ]);
 
-        return back()->with('success', 'Naidagdag ang group.');
+        return back()->with('success', 'Option group added successfully.');
     }
 
     public function destroyGroup(ProductOptionGroup $group)
     {
-        $group->delete(); // cascade sa options
-        return back()->with('success', 'Nabura ang group.');
+        $group->delete(); // cascade deletes options
+        return back()->with('success', 'Option group deleted successfully.');
     }
 
     public function storeOption(Request $request, ProductOptionGroup $group)
@@ -58,12 +58,12 @@ class ProductOptionController extends Controller
         $group->options()->create([
             'name' => $data['name'], 'extra_price' => $data['extra_price'] ?? 0,
         ]);
-        return back()->with('success', 'Naidagdag ang option.');
+        return back()->with('success', 'Option added successfully.');
     }
 
     public function destroyOption(ProductOption $option)
     {
         $option->delete();
-        return back()->with('success', 'Nabura ang option.');
+        return back()->with('success', 'Option deleted successfully.');
     }
 }

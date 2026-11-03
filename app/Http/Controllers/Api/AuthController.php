@@ -77,14 +77,25 @@ class AuthController extends Controller
         $request->validate(['id_token' => 'required|string|max:8192']);
 
         $credentialsPath = config('services.firebase.credentials');
-        if (!$credentialsPath || !is_file($credentialsPath)) {
+        if (!$credentialsPath) {
+            return $this->fail('Firebase Admin credentials are not configured on the server.', 503);
+        }
+
+        $isAbsolutePath = str_starts_with($credentialsPath, '/')
+            || str_starts_with($credentialsPath, '\\\\')
+            || preg_match('/^[A-Za-z]:[\\\\\/]/', $credentialsPath) === 1;
+        $resolvedCredentialsPath = $isAbsolutePath
+            ? $credentialsPath
+            : base_path($credentialsPath);
+
+        if (!is_file($resolvedCredentialsPath) || !is_readable($resolvedCredentialsPath)) {
             return $this->fail('Firebase Admin credentials are not configured on the server.', 503);
         }
 
         try {
             $auth = (new Factory())
                 ->withProjectId(config('services.firebase.project_id'))
-                ->withServiceAccount($credentialsPath)
+                ->withServiceAccount($resolvedCredentialsPath)
                 ->createAuth();
             $firebaseIdToken = $request->input('id_token');
             $verifiedToken = $auth->verifyIdToken($firebaseIdToken, true);

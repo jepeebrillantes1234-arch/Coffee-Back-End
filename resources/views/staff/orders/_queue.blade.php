@@ -53,8 +53,8 @@
                 @if($order->status === 'awaiting_payment')
                     <span class="rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-900">Waiting for customer payment</span>
                 @endif
-                @if($order->status === 'ready' && $order->order_type === 'delivery' && !$order->delivery?->rider_id)
-                    <form method="POST" action="{{ route('staff.orders.assign-available', $order) }}">@csrf<button class="rounded-lg bg-caramel px-3 py-2 text-sm font-semibold text-white">Assign rider</button></form>
+                @if($order->status === 'ready' && $order->order_type === 'delivery' && (!$order->delivery?->rider_id || $order->delivery?->status === 'declined'))
+                    <form method="POST" action="{{ route('staff.orders.assign-available', $order) }}">@csrf<button class="rounded-lg bg-caramel px-3 py-2 text-sm font-semibold text-white">Assign to an online rider</button></form>
                 @endif
                 @if($order->status === 'pending')
                     <form method="POST" action="{{ route('staff.orders.advance', $order) }}">@csrf<input type="hidden" name="action" value="confirm"><button class="rounded-lg bg-espresso px-3 py-2 text-sm font-semibold text-white">Confirm</button></form>

@@ -12,10 +12,22 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
 use App\Support\Settings;
+use App\Support\ShopOperatingHours;
 use Illuminate\Http\Request;
 
 class HomeController extends Controller
 {
+    /** Public operating schedule for customers browsing before sign-in. */
+    public function operatingHours()
+    {
+        return response()->json([
+            'success' => true,
+            'message' => 'OK',
+            'data' => ShopOperatingHours::details(),
+            'errors' => null,
+        ]);
+    }
+
     /** GET /api/v1/app-config */
     public function config(Request $request)
     {
@@ -39,6 +51,7 @@ class HomeController extends Controller
             'delivery_radius_km' => (float) ($settings['delivery_radius_km'] ?? 8),
             'shop_lat' => isset($settings['shop_lat']) ? (float) $settings['shop_lat'] : null,
             'shop_lng' => isset($settings['shop_lng']) ? (float) $settings['shop_lng'] : null,
+            'shop_operating_hours' => ShopOperatingHours::details(),
         ];
 
         $banners = $this->liveHomeBanners($isNewCustomer);

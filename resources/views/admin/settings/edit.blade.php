@@ -15,6 +15,16 @@
     @csrf @method('PUT')
 
     <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+        <p class="font-semibold">Shop Operating Hours</p>
+        <p class="text-sm text-espresso/60">New customer app orders are accepted only during these hours (Philippine time). Existing orders continue processing after closing.</p>
+        <div class="grid sm:grid-cols-2 gap-4">
+            <div><label class="block text-sm mb-1">Opening time</label><input type="time" name="shop_opening_time" value="{{ $v('shop_opening_time', '06:00') }}" required class="{{ $in }}"></div>
+            <div><label class="block text-sm mb-1">Closing time</label><input type="time" name="shop_closing_time" value="{{ $v('shop_closing_time', '20:00') }}" required class="{{ $in }}"></div>
+        </div>
+        <p class="text-xs text-espresso/50">The schedule is enforced by the server using Asia/Manila time.</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
         <p class="font-semibold">First Order Discount</p>
         <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="first_order_enabled" value="1" @checked($v('first_order_enabled', '1') == '1')> Enabled</label>
         <div class="grid sm:grid-cols-2 gap-4">
