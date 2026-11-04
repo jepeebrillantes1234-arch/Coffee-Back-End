@@ -1,11 +1,15 @@
 @extends('layouts.admin')
-@section('title', 'Banners')
+@section('title', $section === 'popups' ? 'Popup Promotions' : 'Home Banners')
 @section('content')
 <div class="flex items-center justify-between mb-2">
-    <h1 class="text-2xl font-semibold">Home Banners &amp; Promotional Announcements</h1>
-    <a href="{{ route('admin.banners.create') }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium">+ New Banner</a>
+    <h1 class="text-2xl font-semibold">{{ $section === 'popups' ? 'Popup Promotions' : 'Home Banners' }}</h1>
+    <a href="{{ route('admin.banners.create', ['section' => $section]) }}" class="bg-caramel text-white px-4 py-2 rounded-lg text-sm font-medium">{{ $section === 'popups' ? '+ New Popup Promotion' : '+ New Home Banner' }}</a>
 </div>
-<p class="text-sm text-espresso/60 mb-6">Active, scheduled banners appear in display order in the Customer App Home carousel. The API returns at most five. Promo and promo-code banners open the existing Promotions page and never apply a promo automatically.</p>
+<p class="text-sm text-espresso/60 mb-4">{{ $section === 'popups' ? 'Active, scheduled Membership and Promo records appear as an independent overlay on Home. They are kept out of the Home Banner Carousel.' : 'Active, scheduled records in this section appear in display order in the Customer App Home carousel. The API returns at most five. Promo and promo-code banners open the existing Promotions page and never apply a promo automatically.' }}</p>
+<nav class="flex gap-2 mb-6" aria-label="Banner management sections">
+    <a href="{{ route('admin.banners.index', ['section' => 'home']) }}" class="rounded-lg px-4 py-2 text-sm font-medium {{ $section === 'home' ? 'bg-espresso text-cream' : 'border border-espresso/20' }}">Home Banners</a>
+    <a href="{{ route('admin.banners.index', ['section' => 'popups']) }}" class="rounded-lg px-4 py-2 text-sm font-medium {{ $section === 'popups' ? 'bg-espresso text-cream' : 'border border-espresso/20' }}">Popup Promotions</a>
+</nav>
 
 <div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
     <table class="w-full text-sm">
@@ -29,7 +33,7 @@
                 <td class="p-3">{{ str($b->destination)->title() }}</td>
                 <td class="p-3">{{ $b->audience === 'new_customers' ? '🆕 New customers only' : '👥 All' }}</td>
                 <td class="p-3 text-xs">
-                    {{ $b->starts_at ? $b->starts_at->format('M d, Y') : 'immediate' }} → {{ $b->ends_at ? $b->ends_at->format('M d, Y') : 'indefinite' }}
+                    {{ $b->starts_at ? $b->starts_at->copy()->timezone('Asia/Manila')->format('M d, Y g:i A') : 'immediate' }} to {{ $b->ends_at ? $b->ends_at->copy()->timezone('Asia/Manila')->format('M d, Y g:i A') : 'indefinite' }}
                     @if ($b->ends_at && $b->ends_at->isPast()) <span class="text-red-600">(ended)</span> @endif
                 </td>
                 <td class="p-3">{{ $b->sort_order }}</td>
@@ -42,7 +46,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="9" class="p-6 text-center text-espresso/50">No banners yet. Create your first one!</td></tr>
+            <tr><td colspan="9" class="p-6 text-center text-espresso/50">{{ $section === 'popups' ? 'No popup promotions yet. Create your first one!' : 'No home banners yet. Create your first one!' }}</td></tr>
         @endforelse
         </tbody>
     </table>

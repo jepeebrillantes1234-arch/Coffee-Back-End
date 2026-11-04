@@ -55,12 +55,14 @@ class HomeController extends Controller
         ];
 
         $banners = $this->liveHomeBanners($isNewCustomer);
+        $popupPromotions = $this->livePopupPromotions($isNewCustomer);
 
         return response()->json([
             'success' => true,
             'message' => 'OK',
             'data' => [
                 'settings' => $config, 'banners' => $banners,
+                'popup_promotions' => $popupPromotions,
                 'payment_mode' => $config['payment_mode'],
                 'first_order' => ['enabled' => $config['first_order_enabled'], 'eligible' => $isNewCustomer, 'percent' => $config['first_order_percent'], 'max' => $config['first_order_max']],
                 'first_order_banner' => [
@@ -101,6 +103,7 @@ class HomeController extends Controller
     private function liveHomeBanners(bool $isNewCustomer): array
     {
         return Banner::live()
+            ->where('show_as_popup', false)
             ->where(function ($query) use ($isNewCustomer) {
                 $query->where('audience', 'all');
                 if ($isNewCustomer) {
@@ -128,6 +131,40 @@ class HomeController extends Controller
             ->values()
             ->all();
     }
+    /** Live Membership and Promo banners configured for the independent Home popup. */
+    private function livePopupPromotions(bool $isNewCustomer): array
+    {
+        return Banner::live()
+            ->where('show_as_popup', true)
+            ->whereIn('banner_type', ['membership', 'promo'])
+            ->where(function ($query) use ($isNewCustomer) {
+                $query->where('audience', 'all');
+                if ($isNewCustomer) {
+                    $query->orWhere('audience', 'new_customers');
+                }
+            })
+            ->orderBy('sort_order')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (Banner $banner) => [
+                'id' => $banner->id,
+                'source_type' => 'banner',
+                'title' => $banner->title,
+                'headline' => $banner->headline,
+                'description' => $banner->description,
+                'image_url' => $banner->image_url,
+                'banner_type' => $banner->banner_type,
+                'destination' => $banner->destination,
+                'destination_id' => $banner->destination_id,
+                'button_text' => $banner->button_text,
+                'sort_order' => (int) $banner->sort_order,
+                'is_active' => true,
+                'show_as_popup' => true,
+            ])
+            ->values()
+            ->all();
+    }
+
     /** Public promo list so the Promos screen does not depend on home merchandising data. */
     public function promos()
     {

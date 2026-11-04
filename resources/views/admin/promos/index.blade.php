@@ -10,31 +10,6 @@
 <p class="mb-4"><a class="text-caramel font-medium" href="{{ route('admin.home-promos.index') }}">Manage Home Bundles &amp; Best Sellers →</a></p>
 <p class="text-sm text-espresso/60 mb-6">Active promos with <b>"Show in app"</b> enabled and a valid schedule appear in the Customer App Home carousel and Promotions page. The Home carousel shows at most five items total.</p>
 
-{{-- ========== FIRST ORDER DISCOUNT BANNER ========== --}}
-<div class="bg-white rounded-2xl shadow-sm p-6 mb-6">
-    <p class="font-semibold">🎁 First Order Discount <span class="text-xs font-normal text-espresso/50">(automatic, no code required · for new customers only)</span></p>
-    <p class="text-xs text-espresso/60 mt-1">The % comes from <a class="text-caramel" href="{{ route('admin.settings.edit') }}">Discount &amp; Fees</a> (current: <b>{{ $tokens['percent'] }}%</b>, limit <b>₱{{ $tokens['max'] }}</b>). Type <b>{percent}</b> or <b>{max}</b> to have the banner update automatically.</p>
-
-    <form method="POST" action="{{ route('admin.promos.first-order') }}" enctype="multipart/form-data" class="grid md:grid-cols-4 gap-4 mt-4 items-end">
-        @csrf @method('PUT')
-        <div><label class="block text-xs mb-1">Small text</label><input name="fo_title" value="{{ old('fo_title', $fo['title']) }}" maxlength="60" class="{{ $in }}"></div>
-        <div><label class="block text-xs mb-1">Large text</label><input name="fo_headline" value="{{ old('fo_headline', $fo['headline']) }}" maxlength="40" required class="{{ $in }}"></div>
-        <div><label class="block text-xs mb-1">Bottom text</label><input name="fo_subtitle" value="{{ old('fo_subtitle', $fo['subtitle']) }}" maxlength="80" class="{{ $in }}"></div>
-        <div>
-            <label class="block text-xs mb-1">Image</label>
-            <div class="flex flex-col items-start gap-2">
-                @if ($fo['image'])
-                    <div class="h-20 w-20 overflow-hidden rounded-xl bg-cream"><img src="{{ asset('storage/' . $fo['image']) }}" alt="First order promotion" class="h-full w-full object-cover"></div>
-                @endif
-                <input type="file" name="fo_image" accept="image/*" class="w-full text-xs">
-            </div>
-            @if ($fo['image']) <label class="text-xs flex items-center gap-1 mt-1"><input type="checkbox" name="remove_fo_image" value="1"> Remove image</label> @endif
-        </div>
-        <div class="md:col-span-4"><button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Save First Order banner</button></div>
-    </form>
-    @error('fo_image') <p class="text-sm text-red-600 mt-2">{{ $message }}</p> @enderror
-</div>
-
 {{-- ========== PROMO LIST ========== --}}
 <div class="grid gap-3 xl:hidden">
     @forelse ($promos as $p)

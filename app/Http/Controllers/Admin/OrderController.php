@@ -176,12 +176,16 @@ class OrderController extends Controller
 
     private function run(Order $order, \Closure $fn, string $action, string $okMsg)
     {
+        $previousStatus = $order->status;
         try {
             $notice = $fn();
         } catch (\DomainException $e) {
             return back()->with('error', $e->getMessage());
         }
-        Activity::log($action, 'orders', "{$order->order_number}: {$action}");
+        $newStatus = $order->fresh()->status;
+        if ($newStatus !== $previousStatus || (! is_string($notice) || $notice === '')) {
+            Activity::log($action, 'orders', "{$order->order_number} (#{$order->id}): {$previousStatus} -> {$newStatus}");
+        }
         $resp = back()->with('success', $okMsg);
         return (is_string($notice) && $notice !== '') ? $resp->with('error', $notice) : $resp;
     }

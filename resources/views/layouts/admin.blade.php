@@ -92,7 +92,7 @@
         'Overview' => [['Dashboard', route('admin.dashboard'), 'admin', 'grid']],
         'Catalog' => [['Products', route('admin.products.index'), 'admin/products*', 'box'], ['Categories', route('admin.categories.index'), 'admin/categories*', 'folder'], ['Promos', route('admin.promos.index'), 'admin/promos*', 'tag'], ['Rewards', route('admin.rewards.index'), 'admin/rewards*', 'star'], ['Banners', route('admin.banners.index'), 'admin/banners*', 'home'], ['Discount & Fees', route('admin.settings.edit'), 'admin/settings*', 'dollar']],
         'People' => [['Customers', route('admin.users.index', 'customer'), 'admin/users/customer*', 'users'], ['Memberships', route('admin.memberships.index'), 'admin/memberships', 'card'], ['Membership Settings', route('admin.memberships.settings'), 'admin/memberships/settings*', 'card'], ['Staff', route('admin.users.index', 'staff'), 'admin/users/staff*', 'badge'], ['Riders', route('admin.users.index', 'rider'), 'admin/users/rider*', 'bike']],
-        'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Cancellation History', route('admin.orders.cancellations'), 'admin/orders/cancellations*', 'file'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Staff Shifts', route('admin.shifts.index'), 'admin/shifts*', 'file'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file'], ['Customer Support', route('admin.support.index'), 'admin/support*', 'users']],
+        'Operations' => [['Orders', route('admin.orders.index'), 'admin/orders*', 'bag'], ['Cancellation History', route('admin.orders.cancellations'), 'admin/orders/cancellations*', 'file'], ['Deliveries', route('admin.deliveries.index'), 'admin/deliveries*', 'truck'], ['Membership Card Deliveries', route('admin.membership-card-deliveries.index'), 'admin/membership-card-deliveries*', 'card'], ['GPS Monitor', route('admin.gps.index'), 'admin/gps-monitor*', 'pin'], ['Payments', route('admin.payments.index'), 'admin/payments*', 'card'], ['Staff Shifts', route('admin.shifts.index'), 'admin/shifts*', 'file'], ['Reviews', route('admin.reviews.index'), 'admin/reviews*', 'star'], ['Reports', route('admin.reports.show', 'sales'), 'admin/reports*', 'chart'], ['Activity Logs', route('admin.activity.index'), 'admin/activity-logs*', 'file'], ['Customer Support', route('admin.support.index'), 'admin/support*', 'users']],
     ];
     $svg = fn (string $key, string $class = '') => '<svg class="' . $class . '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' . ($icons[$key] ?? '') . '</svg>';
     $user = auth()->user();
@@ -125,7 +125,8 @@
             <button type="button" class="icon-button" id="sidebarToggle" aria-label="Toggle navigation">{!! $svg('menu') !!}</button>
             <label class="search-wrap">{!! $svg('search') !!}<input id="adminSearch" type="search" placeholder="Search navigation..." aria-label="Search navigation"></label>
             <span class="topbar-spacer"></span><span class="topbar-leaves" aria-hidden="true"></span>
-            <a href="{{ route('admin.support.index') }}" class="icon-button support-bell-link" id="adminSupportBell" aria-label="Customer support notifications">{!! $svg('bell') !!}<span id="supportBellBadge" class="support-bell-badge" hidden>0</span></a>
+            <a href="{{ route('admin.notifications.index') }}" class="icon-button support-bell-link" id="adminSupportBell" aria-label="Notification history">{!! $svg('bell') !!}<span id="supportBellBadge" class="support-bell-badge" hidden>0</span></a>
+            @include('staff.membership-card-deliveries.notifications-widget')
             <button type="button" class="admin-account account-trigger" id="adminProfileOpen" aria-label="Open profile settings"><span class="account-avatar">@if($user?->avatar)<img src="{{ asset('storage/'.$user->avatar) }}" alt="">@else{{ strtoupper(substr($user->name ?? 'A', 0, 1)) }}@endif</span><span class="account-copy"><span class="account-name">{{ $user->name ?? 'Admin' }}</span><span class="account-role">Administrator</span></span><span class="account-chevron" aria-hidden="true">&#8964;</span></button>
         </header>
         <main class="workspace @if (!request()->routeIs('admin.dashboard')) admin-responsive @endif">
@@ -205,7 +206,7 @@
   const navBadge=document.getElementById('supportUnreadBadge');
   const bellBadge=document.getElementById('supportBellBadge');
   const alertButton=document.getElementById('enableSupportAlerts');
-  const storageKey='kjm-admin-last-support-message';
+  const storageKey='kjm-admin-last-notification-id';
   let initialized=false;
   let toastTimer;
   const toast=document.createElement('div');
@@ -216,11 +217,11 @@
   const announce=latest=>{
     toast.innerHTML='';
     const link=document.createElement('a');link.href=latest.url;
-    const title=document.createElement('div');title.className='support-toast-title';title.textContent='New customer support message';
-    const preview=document.createElement('div');preview.className='support-toast-preview';preview.textContent=latest.customer+': '+latest.preview;
+    const title=document.createElement('div');title.className='support-toast-title';title.textContent=latest.title;
+    const preview=document.createElement('div');preview.className='support-toast-preview';preview.textContent=latest.message;
     link.append(title,preview);toast.appendChild(link);toast.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('visible'),9000);
     if('Notification' in window && Notification.permission==='granted'){
-      const notification=new Notification('New customer support message',{body:latest.customer+': '+latest.preview,tag:'support-'+latest.conversation_id});
+      const notification=new Notification(latest.title,{body:latest.message,tag:'admin-notification-'+latest.id});
       notification.onclick=()=>{window.focus();location.href=latest.url;notification.close()};
     }
   };
@@ -228,7 +229,7 @@
     try{
       const response=await fetch(endpoint,{headers:{'X-Requested-With':'XMLHttpRequest'},credentials:'same-origin'});
       if(!response.ok)return;
-      const data=await response.json();setBadge(navBadge,data.unread_count||0);setBadge(bellBadge,data.unread_count||0);
+      const data=await response.json();setBadge(navBadge,data.support_unread_count||0);setBadge(bellBadge,data.unread_count||0);
       const latest=data.latest;
       const previous=localStorage.getItem(storageKey);
       if(!latest){initialized=true;return}

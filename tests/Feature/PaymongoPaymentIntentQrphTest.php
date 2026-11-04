@@ -4,11 +4,14 @@ namespace Tests\Feature;
 
 use App\Models\Membership;
 use App\Models\MembershipPayment;
+use App\Models\Category;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\LoyaltyService;
 use App\Services\PaymentGateway;
+use App\Support\Settings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -41,6 +44,8 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('data.qr_image_url', 'data:image/png;base64,bW9ja19xcl9pbWFnZQ==')
             ->assertJsonPath('data.payment_reference', $order->order_number)
+            ->assertJsonPath('data.status', 'awaiting_payment')
+            ->assertJsonPath('data.payment_attempt_status', 'pending')
             ->assertJsonMissingPath('data.provider_intent_id')
             ->assertJsonMissingPath('data.client_key');
         $this->assertStringNotContainsString('sk_test_mock_only', $response->getContent());
@@ -59,6 +64,72 @@ class PaymongoPaymentIntentQrphTest extends TestCase
             && data_get($request->data(), 'data.attributes.type') === 'qrph');
         Http::assertSent(fn ($request) => str_contains($request->url(), '/payment_intents/pi_test_order/attach')
             && data_get($request->data(), 'data.attributes.client_key') === 'pi_test_order_client_key');
+    }
+
+    public function test_qr_checkout_retry_reuses_the_existing_order_and_returns_the_qr_details(): void
+    {
+        config(['shop.payment' => 'online']);
+        Settings::set('payment_qrph_enabled', '1');
+        $customer = $this->user('customer');
+        $category = Category::create(['name' => 'QR Retry']);
+        $product = Product::create([
+            'category_id' => $category->id,
+            'name' => 'QR Retry Coffee',
+            'base_price' => 100,
+            'is_available' => true,
+        ]);
+        $payload = [
+            'order_type' => 'pickup',
+            'payment_method' => 'qrph',
+            'checkout_request_id' => (string) Str::uuid(),
+            'items' => [['product_id' => $product->id, 'quantity' => 1]],
+        ];
+        $paymentMethodCalls = 0;
+        Http::fake(function ($request) use (&$paymentMethodCalls) {
+            if ($request->method() === 'POST' && str_ends_with($request->url(), '/payment_intents')) {
+                return Http::response(['data' => ['id' => 'pi_retry_existing', 'attributes' => [
+                    'client_key' => 'pi_retry_existing_client_key',
+                    'status' => 'awaiting_payment_method',
+                ]]], 201);
+            }
+            if ($request->method() === 'GET' && str_ends_with($request->url(), '/payment_intents/pi_retry_existing')) {
+                return Http::response(['data' => ['id' => 'pi_retry_existing', 'attributes' => [
+                    'client_key' => 'pi_retry_existing_client_key',
+                    'status' => 'awaiting_payment_method',
+                ]]], 200);
+            }
+            if ($request->method() === 'POST' && str_ends_with($request->url(), '/payment_methods')) {
+                $paymentMethodCalls++;
+                if ($paymentMethodCalls === 1) {
+                    return Http::response(['errors' => [['code' => 'temporary_failure']]], 500);
+                }
+                return Http::response(['data' => ['id' => 'pm_retry_existing']], 201);
+            }
+            if (str_ends_with($request->url(), '/pi_retry_existing/attach')) {
+                return Http::response(['data' => ['attributes' => [
+                    'status' => 'awaiting_next_action',
+                    'next_action' => ['code' => ['image_url' => 'data:image/png;base64,cXJfcmV0cnk=']],
+                ]]], 200);
+            }
+            return Http::response(['errors' => [['code' => 'unexpected_mock_request']]], 500);
+        });
+
+        $this->actingAs($customer, 'sanctum')->postJson('/api/v1/orders', $payload)->assertStatus(502);
+        $this->assertDatabaseCount('orders', 1);
+        $order = Order::firstOrFail();
+        $this->assertSame('awaiting_payment', $order->status);
+        $this->assertDatabaseHas('payments', [
+            'order_id' => $order->id,
+            'provider_intent_id' => 'pi_retry_existing',
+            'status' => 'pending',
+        ]);
+
+        $retry = $this->postJson('/api/v1/orders', $payload)->assertCreated();
+        $retry->assertJsonPath('data.order.id', $order->id)
+            ->assertJsonPath('data.order.status', 'awaiting_payment')
+            ->assertJsonPath('data.checkout.qr_image_url', 'data:image/png;base64,cXJfcmV0cnk=');
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertSame('pi_retry_existing', Payment::where('order_id', $order->id)->value('provider_intent_id'));
     }
 
     public function test_another_customer_cannot_create_a_qr_for_someone_elses_order(): void
@@ -97,6 +168,10 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         $payment = Payment::where('order_id', $order->id)->firstOrFail();
         $intentId = $payment->provider_intent_id;
         $payment->update(['qr_expires_at' => now()->subSecond()]);
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/v1/orders/' . $order->id)
+            ->assertOk()
+            ->assertJsonPath('data.payment_attempt_status', 'expired');
 
         $second = $gateway->createCheckout($order);
 
@@ -126,6 +201,10 @@ class PaymongoPaymentIntentQrphTest extends TestCase
 
         $this->assertSame('failed', $payment->fresh()->status);
         $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/v1/orders/' . $order->id)
+            ->assertOk()
+            ->assertJsonPath('data.payment_attempt_status', 'failed');
     }
 
     public function test_membership_checkout_returns_qr_without_exposing_provider_intent_or_secret(): void
@@ -168,6 +247,10 @@ class PaymongoPaymentIntentQrphTest extends TestCase
             'HTTP_PAYMONGO_SIGNATURE' => 't=1234567890,li=invalid',
         ], $body)->assertUnauthorized();
         $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/v1/orders/' . $order->id)
+            ->assertOk()
+            ->assertJsonPath('data.payment_attempt_status', 'pending');
 
         $this->postWebhook($body)->assertOk();
         $paidAt = $order->payments()->first()->fresh()->paid_at;
@@ -175,6 +258,40 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         $this->assertSame('paid', $order->fresh()->payment_status);
         $this->assertSame('pay_test_paid', $order->payments()->first()->provider_payment_id);
         $this->assertEquals($paidAt, $order->payments()->first()->paid_at);
+    }
+
+    public function test_late_paid_webhook_does_not_reactivate_a_cancelled_order(): void
+    {
+        Http::fake(['*' => Http::response(['data' => ['id' => 're_test_late_order']], 200)]);
+
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-PI-LATE-CANCELLED');
+        $order->update([
+            'status' => 'cancelled',
+            'reject_reason' => 'Customer cancellation',
+        ]);
+        Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_test_late_cancelled',
+            'amount' => 125,
+            'status' => 'pending',
+        ]);
+
+        $body = $this->paymentWebhook(
+            'payment.paid',
+            'pi_test_late_cancelled',
+            'pay_test_late_cancelled',
+            12500,
+        );
+        $this->postWebhook($body)->assertOk();
+
+        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertSame('refunded', $order->fresh()->payment_status);
+        $this->assertSame('refunded', $order->payments()->first()->status);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/refunds')
+            && data_get($request->data(), 'data.attributes.payment_id') === 'pay_test_late_cancelled');
     }
 
     public function test_wrong_amount_does_not_pay_and_membership_payment_intent_webhook_activates_exact_membership(): void
@@ -191,6 +308,10 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         ]);
         $this->postWebhook($this->paymentWebhook('payment.paid', 'pi_test_wrong', 'pay_test_wrong', 12499))->assertOk();
         $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/v1/orders/' . $order->id)
+            ->assertOk()
+            ->assertJsonPath('data.payment_attempt_status', 'pending');
 
         $membership = Membership::create([
             'user_id' => $customer->id,

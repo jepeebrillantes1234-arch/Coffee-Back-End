@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\HomeController;
 use App\Http\Controllers\Api\MenuController;
 use App\Http\Controllers\Api\LoyaltyController;
+use App\Http\Controllers\Api\MembershipCardDeliveryController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PaymongoWebhookController;
@@ -68,6 +69,8 @@ Route::prefix('v1')->group(function () {
         Route::middleware('role:customer')->group(function () {
             Route::get('app-config',        [HomeController::class, 'config']);
             Route::get('loyalty', [LoyaltyController::class, 'summary']);
+            Route::get('membership/card-deliveries', [MembershipCardDeliveryController::class, 'customerIndex']);
+            Route::post('membership/card-deliveries', [MembershipCardDeliveryController::class, 'requestDelivery'])->middleware('throttle:5,1');
             Route::post('membership/checkout', [LoyaltyController::class, 'checkout'])->middleware('throttle:5,1');
             Route::post('membership/payment/verify', [LoyaltyController::class, 'verify'])->middleware('throttle:30,1');
             Route::get('rewards', [LoyaltyController::class, 'rewards']);
@@ -104,6 +107,11 @@ Route::prefix('v1')->group(function () {
         // ===== RIDER =====
         Route::middleware('role:rider')->prefix('rider')->group(function () {
             Route::get('profile', [RiderController::class, 'profile']);
+            Route::get('membership-card-deliveries', [MembershipCardDeliveryController::class, 'riderIndex']);
+            Route::get('membership-card-deliveries/{id}', [MembershipCardDeliveryController::class, 'riderShow'])->whereNumber('id');
+            Route::post('membership-card-deliveries/{id}/start', [MembershipCardDeliveryController::class, 'startDelivery'])->whereNumber('id');
+            Route::post('membership-card-deliveries/{id}/delivered', [MembershipCardDeliveryController::class, 'markDelivered'])->whereNumber('id');
+            Route::post('membership-card-delivery-location', [MembershipCardDeliveryController::class, 'location'])->middleware('throttle:60,1');
             Route::put('profile', [RiderController::class, 'updateProfile']);
             Route::get('deliveries',                 [RiderController::class, 'index']);
             Route::get('deliveries/{id}',            [RiderController::class, 'show']);

@@ -33,7 +33,6 @@ class RewardController extends Controller
     {
         $data = $this->validated($request);
         if ($request->hasFile('image')) {
-            if ($reward->image) Storage::disk('public')->delete($reward->image);
             $data['image'] = $request->file('image')->store('rewards', 'public');
         }
         $reward->update($data);

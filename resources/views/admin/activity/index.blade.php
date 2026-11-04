@@ -2,12 +2,17 @@
 @section('title', 'Activity Logs')
 @section('content')
 <h1 class="text-2xl font-semibold mb-6">Activity Logs</h1>
-<form method="GET" class="flex gap-3 mb-4">
+<form method="GET" class="flex flex-wrap gap-3 mb-4">
     <input name="search" value="{{ request('search') }}" placeholder="Search..." class="rounded-lg border border-espresso/20 px-3 py-2 text-sm w-64">
     <select name="module" class="rounded-lg border border-espresso/20 px-3 py-2 text-sm">
         <option value="">All modules</option>
         @foreach ($modules as $m) <option value="{{ $m }}" @selected(request('module') === $m)>{{ $m }}</option> @endforeach
     </select>
+    <select name="user_id" class="rounded-lg border border-espresso/20 px-3 py-2 text-sm"><option value="">All users</option>@foreach ($users as $user)<option value="{{ $user->id }}" @selected(request('user_id') == $user->id)>{{ $user->name }} (#{{ $user->id }})</option>@endforeach</select>
+    <select name="role" class="rounded-lg border border-espresso/20 px-3 py-2 text-sm"><option value="">All roles</option>@foreach (['staff','rider','admin'] as $role)<option value="{{ $role }}" @selected(request('role') === $role)>{{ ucfirst($role) }}</option>@endforeach</select>
+    <select name="action" class="rounded-lg border border-espresso/20 px-3 py-2 text-sm"><option value="">All actions</option>@foreach ($actions as $action)<option value="{{ $action }}" @selected(request('action') === $action)>{{ $action }}</option>@endforeach</select>
+    <label class="text-xs text-espresso/60">From <input type="date" name="from" value="{{ request('from') }}" class="block rounded-lg border border-espresso/20 px-3 py-2 text-sm"></label>
+    <label class="text-xs text-espresso/60">To <input type="date" name="to" value="{{ request('to') }}" class="block rounded-lg border border-espresso/20 px-3 py-2 text-sm"></label>
     <button class="bg-espresso text-cream px-4 py-2 rounded-lg text-sm">Filter</button>
 </form>
 <div id="admin-activity-live"><div class="bg-white rounded-2xl shadow-sm overflow-x-auto">
@@ -19,7 +24,7 @@
         @forelse ($logs as $l)
             <tr class="border-t border-espresso/10">
                 <td class="p-3 whitespace-nowrap text-xs">{{ $l->created_at->format('M d, h:i A') }}</td>
-                <td class="p-3">{{ $l->user->name ?? '—' }} <span class="text-xs text-espresso/40">{{ $l->user->role ?? '' }}</span></td>
+                <td class="p-3">{{ $l->user->name ?? '—' }} <span class="text-xs text-espresso/40">#{{ $l->user_id ?? '—' }} · {{ $l->user->role ?? 'Account removed' }}</span></td>
                 <td class="p-3">{{ $l->module }}</td>
                 <td class="p-3">{{ $l->action }}</td>
                 <td class="p-3">{{ $l->description }}</td>

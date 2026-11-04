@@ -1,14 +1,30 @@
 @extends('layouts.admin')
-@section('title', $banner->exists ? 'Edit Banner' : 'New Banner')
+@section('title', $banner->exists ? ($section === 'popups' ? 'Edit Popup Promotion' : 'Edit Home Banner') : ($section === 'popups' ? 'New Popup Promotion' : 'New Home Banner'))
 @section('content')
-@php $in = 'w-full rounded-lg border border-espresso/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caramel'; @endphp
-<h1 class="text-2xl font-semibold mb-6">{{ $banner->exists ? 'Edit Banner' : 'New Banner' }}</h1>
+@php
+    $in = 'w-full rounded-lg border border-espresso/20 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-caramel';
+    $bannerTypes = $section === 'popups'
+        ? ['promo' => 'Promo', 'membership' => 'Membership']
+        : ['new_product' => 'New Product', 'new_promo' => 'New Promo', 'promo_code' => 'Promo Code', 'special_offer' => 'Special Offer', 'announcement' => 'Announcement', 'order_now' => 'Order Now', 'promo' => 'Promo', 'membership' => 'Membership', 'redeem' => 'Redeem', 'rewards' => 'Rewards', 'custom' => 'Custom'];
+@endphp
+<h1 class="text-2xl font-semibold mb-6">{{ $banner->exists ? ($section === 'popups' ? 'Edit Popup Promotion' : 'Edit Home Banner') : ($section === 'popups' ? 'New Popup Promotion' : 'New Home Banner') }}</h1>
 
 <div class="grid xl:grid-cols-2 gap-6">
 <form method="POST" enctype="multipart/form-data"
       action="{{ $banner->exists ? route('admin.banners.update', $banner, false) : route('admin.banners.store', [], false) }}"
       class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
     @csrf
+    @if ($banner->exists)
+        <div>
+            <label class="block text-sm font-medium mb-1">Section</label>
+            <select name="section" class="{{ $in }}">
+                <option value="home" @selected($section === "home")>Home Banners</option>
+                <option value="popups" @selected($section === "popups")>Popup Promotions</option>
+            </select>
+        </div>
+    @else
+        <input type="hidden" name="section" value="{{ $section }}">
+    @endif
     @if ($banner->exists) @method('PUT') @endif
 
     <div>
@@ -27,8 +43,8 @@
     </div>
 
     <div class="text-xs bg-cream rounded-lg px-3 py-2 text-espresso/80">
-        💡 Type <b>{percent}</b> to automatically pull the First Order Discount % from <i>Discount &amp; Fees</i>
-        (current: <b>{{ $tokens['percent'] }}%</b>), and <b>{max}</b> for the limit (current: <b>₱{{ $tokens['max'] }}</b>).
+        ðŸ’¡ Type <b>{percent}</b> to automatically pull the First Order Discount % from <i>Discount &amp; Fees</i>
+        (current: <b>{{ $tokens['percent'] }}%</b>), and <b>{max}</b> for the limit (current: <b>â‚±{{ $tokens['max'] }}</b>).
         When you update the discount there, the banner will update instantly.
     </div>
 
@@ -41,15 +57,16 @@
             </div>
         @endif
         <input id="f-image" type="file" name="image" accept="image/*" class="text-sm">
-        <p class="text-xs text-espresso/50 mt-1">Vertical image of around 600×700 px works best, with the coffee centered. Up to 2 MB.</p>
+        <p class="text-xs text-espresso/50 mt-1">Vertical image of around 600Ã—700 px works best, with the coffee centered. Up to 2 MB.</p>
         @error('image') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
     </div>
 
     <div class="grid sm:grid-cols-2 gap-4">
         <div>
             <label class="block text-sm font-medium mb-1">Banner type</label>
+            @if ($section === 'popups') <p class="text-xs text-espresso/50 mb-1">Popup promotions use the Promo or Membership type and stay separate from the Home Banner Carousel.</p> @endif
             <select name="banner_type" class="{{ $in }}">
-                @foreach (['new_product' => 'New Product', 'new_promo' => 'New Promo', 'promo_code' => 'Promo Code', 'special_offer' => 'Special Offer', 'announcement' => 'Announcement', 'order_now' => 'Order Now', 'promo' => 'Promo', 'membership' => 'Membership', 'redeem' => 'Redeem', 'rewards' => 'Rewards', 'custom' => 'Custom'] as $value => $label)
+                @foreach ($bannerTypes as $value => $label)
                     <option value="{{ $value }}" @selected(old('banner_type', $banner->banner_type) === $value)>{{ $label }}</option>
                 @endforeach
             </select>
@@ -58,7 +75,7 @@
         <div>
             <label class="block text-sm font-medium mb-1">Tap destination</label>
             <select name="destination" class="{{ $in }}">
-                @foreach (['product' => 'Product (choose below)', 'promos' => 'Promotions', 'promo_code' => 'Promo codes / Promotions', 'offer' => 'Special offers / Promotions', 'announcement' => 'Announcement details', 'menu' => 'Menu / Order Now', 'profile' => 'Profile', 'cart' => 'Cart', 'orders' => 'My Orders'] as $value => $label)
+                @foreach (['product' => 'Product (choose below)', 'promos' => 'Promotions', 'promo_code' => 'Promo codes / Promotions', 'offer' => 'Special offers / Promotions', 'announcement' => 'Announcement details', 'menu' => 'Menu / Order Now', 'profile' => 'Profile', 'membership' => 'Membership', 'cart' => 'Cart', 'orders' => 'My Orders'] as $value => $label)
                     <option value="{{ $value }}" @selected(old('destination', $banner->destination) === $value)>{{ $label }}</option>
                 @endforeach
             </select>
@@ -101,12 +118,12 @@
             <input type="number" min="0" name="sort_order" value="{{ old('sort_order', $banner->sort_order) }}" class="{{ $in }}">
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Starts at <span class="text-espresso/40">optional</span></label>
-            <input type="date" name="starts_at" value="{{ old('starts_at', $banner->starts_at?->format('Y-m-d')) }}" class="{{ $in }}">
+            <label class="block text-sm font-medium mb-1">Starts at <span class="text-espresso/40">optional - Asia/Manila</span></label>
+            <input type="datetime-local" name="starts_at" value="{{ old('starts_at', $banner->starts_at?->copy()->timezone('Asia/Manila')->format('Y-m-d\\TH:i')) }}" class="{{ $in }}">
         </div>
         <div>
-            <label class="block text-sm font-medium mb-1">Ends at <span class="text-espresso/40">optional</span></label>
-            <input type="date" name="ends_at" value="{{ old('ends_at', $banner->ends_at?->format('Y-m-d')) }}" class="{{ $in }}">
+            <label class="block text-sm font-medium mb-1">Ends at <span class="text-espresso/40">optional - Asia/Manila</span></label>
+            <input type="datetime-local" name="ends_at" value="{{ old('ends_at', $banner->ends_at?->copy()->timezone('Asia/Manila')->format('Y-m-d\\TH:i')) }}" class="{{ $in }}">
             @error('ends_at') <p class="text-sm text-red-600 mt-1">{{ $message }}</p> @enderror
         </div>
     </div>
@@ -115,7 +132,7 @@
 
     <div class="flex gap-3 pt-2">
         <button class="bg-espresso text-cream px-5 py-2 rounded-lg font-medium">Save</button>
-        <a href="{{ route('admin.banners.index') }}" class="px-5 py-2 rounded-lg border border-espresso/20">Cancel</a>
+        <a href="{{ route('admin.banners.index', ['section' => $section]) }}" class="px-5 py-2 rounded-lg border border-espresso/20">Cancel</a>
     </div>
 </form>
 

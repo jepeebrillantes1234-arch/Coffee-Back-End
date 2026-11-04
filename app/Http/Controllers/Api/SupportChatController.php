@@ -9,6 +9,7 @@ use App\Models\SupportConversation;
 use App\Models\SupportMessage;
 use App\Services\SupportAssistant;
 use App\Support\Notifier;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -149,6 +150,26 @@ class SupportChatController extends Controller
             $conversation->status = 'open';
         }
         $conversation->save();
+
+        $customerName = $userId
+            ? (string) (\App\Models\User::whereKey($userId)->value('name') ?? 'Customer')
+            : (string) ($conversation->guest_name ?? 'Customer');
+        $notificationData = [
+            'conversation_id' => (string) $conversation->id,
+            'message_id' => (string) $message->id,
+            'customer_id' => $userId ? (string) $userId : null,
+            'customer_name' => $customerName,
+        ];
+        if ($conversation->refund_order_id) {
+            $notificationData['order_id'] = (string) $conversation->refund_order_id;
+        }
+        \App\Models\User::where('role', 'admin')->where('status', 'active')->pluck('id')->each(function ($adminId) use ($message, $customerName, $notificationData) {
+            $exists = DB::table('app_notifications')->where('user_id', $adminId)->where('type', 'customer_support')
+                ->where('data->message_id', $notificationData['message_id'])->exists();
+            if (! $exists) {
+                Notifier::send((int) $adminId, 'Customer support message', $customerName.' sent a new message.', 'customer_support', $notificationData);
+            }
+        });
 
         return $this->ok($this->payload($conversation->fresh()), 'Message sent.', 201);
     }

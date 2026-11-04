@@ -38,21 +38,22 @@ class SupportChatController extends Controller
             ->whereRaw('(select max(id) from support_messages where conversation_id = support_conversations.id and sender_type in (?, ?)) > coalesce((select max(id) from support_messages where conversation_id = support_conversations.id and sender_type = ?), 0)', ['customer', 'staff', 'admin']);
 
         $count = (clone $unanswered)->count();
-        $latest = (clone $unanswered)
-            ->with(['user:id,name,role', 'messages' => fn ($q) => $q->whereIn('sender_type', ['customer', 'staff'])->latest('id')->limit(1)])
-            ->latest('last_message_at')->first();
-        $message = $latest?->messages->first();
+
+        $unreadNotifications = \Illuminate\Support\Facades\DB::table('app_notifications')
+            ->where('user_id', auth()->id())->where('is_read', false);
+        $latestNotification = (clone $unreadNotifications)->orderByDesc('id')->first();
 
         return response()->json([
-            'unread_count' => $count,
-            'latest' => $latest && $message ? [
-                'message_id' => $message->id,
-                'conversation_id' => $latest->id,
-                'customer' => $latest->user->name ?? $latest->guest_name ?? 'Customer',
-                'preview' => $message->body ?: ($message->attachment_name ? 'Sent an attachment' : 'New message'),
-                'url' => route('admin.support.show', $latest),
+            'support_unread_count' => $count,
+            'unread_count' => (clone $unreadNotifications)->count(),
+            'latest' => $latestNotification ? [
+                'id' => $latestNotification->id,
+                'message_id' => $latestNotification->id,
+                'title' => $latestNotification->title,
+                'message' => $latestNotification->message,
+                'url' => route('admin.notifications.show', $latestNotification->id),
             ] : null,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate');
     }
 
     public function destroy(SupportConversation $conversation)

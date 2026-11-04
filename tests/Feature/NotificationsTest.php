@@ -305,6 +305,11 @@ class NotificationsTest extends TestCase
             $this->assertSame($status, json_decode($record->data, true)['status']);
         }
         $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $rider->id,
+            'action' => 'complete_delivery',
+            'module' => 'deliveries',
+        ]);
     }
 
     public function test_rider_chat_message_notifies_only_the_order_customer_with_safe_payload(): void

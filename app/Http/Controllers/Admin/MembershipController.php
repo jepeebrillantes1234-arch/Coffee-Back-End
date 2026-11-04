@@ -3,11 +3,13 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Membership;
+use App\Models\MembershipCardPrint;
 use App\Models\RewardRedemption;
 use App\Support\Activity;
 use App\Support\Settings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class MembershipController extends Controller
 {
@@ -54,8 +56,34 @@ class MembershipController extends Controller
 
     public function show(Membership $membership)
     {
-        $membership->load(['user', 'payments' => fn ($q) => $q->latest('id'), 'transactions.order:id,order_number', 'redemptions.reward']);
-        return view('admin.memberships.show', compact('membership'));
+        $membership->load([
+            'user',
+            'payments' => fn ($q) => $q->latest('id'),
+            'transactions.order:id,order_number',
+            'redemptions.reward',
+            'cardPrints.admin:id,name',
+        ]);
+
+        $cardReady = $membership->isActive()
+            && $membership->payments->contains(fn ($payment) => $payment->status === 'paid');
+        $cardPrintCount = $membership->cardPrints->count();
+        $designsActive = Settings::get('membership_card_design_active', '0') === '1';
+        $frontPath = Settings::get('membership_card_front_design') ?: Settings::get('membership_card_design');
+        $backPath = Settings::get('membership_card_back_design');
+        $frontCardUrl = $designsActive && filled($frontPath)
+            ? Storage::disk('public')->url($frontPath)
+            : asset('images/membership-cards/card.png');
+        $backCardUrl = $designsActive && filled($backPath)
+            ? Storage::disk('public')->url($backPath)
+            : asset('images/membership-cards/card1.png');
+
+        return view('admin.memberships.show', compact(
+            'membership',
+            'cardReady',
+            'cardPrintCount',
+            'frontCardUrl',
+            'backCardUrl'
+        ));
     }
 
     public function toggle(Membership $membership)
@@ -68,6 +96,58 @@ class MembershipController extends Controller
         if (!$paid) return back()->with('error', 'A pending or failed payment cannot activate a membership.');
         $membership->update(['status' => 'active', 'activated_at' => $membership->activated_at ?? now()]);
         return back()->with('success', 'Membership activated.');
+    }
+
+    public function markCardPrinted(Request $request, Membership $membership)
+    {
+        return $this->recordCardPrint($request, $membership, false);
+    }
+
+    public function reprintCard(Request $request, Membership $membership)
+    {
+        return $this->recordCardPrint($request, $membership, true);
+    }
+
+    private function recordCardPrint(Request $request, Membership $membership, bool $reprint)
+    {
+        $result = DB::transaction(function () use ($request, $membership, $reprint) {
+            $locked = Membership::whereKey($membership->id)->lockForUpdate()->firstOrFail();
+            $eligible = $locked->isActive()
+                && $locked->payments()->where('status', 'paid')->exists();
+            if (!$eligible) return 'not_ready';
+
+            $lastPrintNumber = (int) (MembershipCardPrint::where('membership_id', $locked->id)
+                ->lockForUpdate()
+                ->max('print_number') ?? 0);
+            if (!$reprint && $lastPrintNumber > 0) return 'already_printed';
+            if ($reprint && $lastPrintNumber === 0) return 'not_printed';
+
+            MembershipCardPrint::create([
+                'membership_id' => $locked->id,
+                'admin_id' => $request->user()->id,
+                'print_number' => $lastPrintNumber + 1,
+                'printed_at' => now(),
+            ]);
+
+            return 'recorded';
+        });
+
+        if ($result !== 'recorded') {
+            $message = match ($result) {
+                'not_ready' => 'Only an active membership with a verified paid payment can be printed.',
+                'already_printed' => 'This card is already marked as printed. Use Reprint Card to record another copy.',
+                default => 'Print the card once before recording a reprint.',
+            };
+            return back()->with('error', $message);
+        }
+
+        Activity::log(
+            'create',
+            'membership_card_prints',
+            ($reprint ? 'Recorded membership card reprint for ' : 'Marked membership card printed for ') . $membership->member_id
+        );
+
+        return back()->with('success', $reprint ? 'Membership card reprint recorded.' : 'Membership card marked as printed.');
     }
 
     public function claim(Request $request, RewardRedemption $redemption)

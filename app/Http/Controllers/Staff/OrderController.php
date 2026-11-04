@@ -5,6 +5,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Delivery;
 use App\Models\Order;
 use App\Services\OrderWorkflow;
+use App\Support\Activity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -36,6 +37,8 @@ class OrderController extends Controller
     }
     public function advance(Order $order, Request $request, OrderWorkflow $workflow)
     {
+        $previousStatus = $order->status;
+        $action = (string) $request->input('action');
         try {
             $notice = match ($request->input('action')) {
                 'confirm' => $workflow->confirm($order),
@@ -50,8 +53,18 @@ class OrderController extends Controller
         }
 
         if (is_string($notice) && $notice !== '') {
+            if ($order->fresh()->status !== $previousStatus) {
+                Activity::log($action, 'orders', "{$order->order_number} (#{$order->id}): {$previousStatus} -> {$order->fresh()->status}");
+            }
             return back()->with('error', $notice);
         }
+
+        $newStatus = $order->fresh()->status;
+        $details = "{$order->order_number} (#{$order->id}): {$previousStatus} -> {$newStatus}";
+        if ($action === 'assign_available') {
+            $details .= '; rider #'.(Delivery::where('order_id', $order->id)->value('rider_id') ?? 'unassigned');
+        }
+        Activity::log($action, 'orders', $details);
 
         return back()->with('success', 'Order updated.');
     }
@@ -68,6 +81,9 @@ class OrderController extends Controller
             return back()->with('error', $notice);
         }
 
+        $riderId = Delivery::where('order_id', $order->id)->value('rider_id');
+        Activity::log('assign_available', 'deliveries', "Order {$order->order_number} (#{$order->id}): ready -> rider_assigned; rider #{$riderId}.");
+
         return back()->with('success', 'Delivery assigned to an online rider.');
     }
 
@@ -82,6 +98,7 @@ class OrderController extends Controller
             DB::table('order_status_logs')->insert(['order_id'=>$order->id,'status'=>'completed','changed_by'=>$request->user()->id,'created_at'=>now()]);
             \App\Support\Notifier::order($order->fresh(),'completed');
         });
+        Activity::log('remit', 'deliveries', "Order {$order->order_number} (#{$order->id}) completed after rider cash handover.");
         return back()->with('success','Cash handover recorded and order completed.');
     }
     private function orders() { return Order::with(['user:id,name,phone','items.product:id,name,image','items.options','delivery.rider:id,name'])->whereIn('status',['awaiting_payment','pending','confirmed','preparing','ready','rider_assigned','picked_up','on_the_way','delivered'])->latest('id')->limit(100)->get(); }

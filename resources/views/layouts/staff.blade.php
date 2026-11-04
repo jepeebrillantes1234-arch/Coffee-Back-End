@@ -192,6 +192,7 @@
     $tabs = [
 
         ['staff.orders',       'Orders',       'staff/orders*'],
+        ['staff.membership-card-deliveries.index', 'Membership Card Delivery', 'staff/membership-card-deliveries*'],
 
         ['staff.pos',          'Walk-in POS',  'staff/pos*'],
 
@@ -236,6 +237,8 @@
             <div id="staffNotificationDropdown" class="staff-notification-dropdown" hidden><div class="staff-notification-head">Pending order notifications</div><div id="staffNotificationList"><div class="staff-notification-empty">Loading orders...</div></div><a class="staff-notification-footer" href="{{ route('staff.orders') }}">View order queue</a></div>
 
         </div>
+
+        @include('staff.membership-card-deliveries.notifications-widget')
 
         <div id="staff-live-indicator" class="staff-live-indicator" data-connected="false" role="status" aria-live="polite"><i></i><span>Connecting</span></div>
 

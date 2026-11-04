@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Delivery;
 use App\Models\Payment;
 use App\Support\Notifier;
+use App\Support\Activity;
 use App\Support\Settings;
 use App\Services\OrderTrackingRouter;
 use Illuminate\Http\Request;
@@ -48,26 +49,30 @@ class RiderController extends Controller
     }
     public function accept(Request $r,int $id)
     {
-        return DB::transaction(function () use ($r, $id) {
+        $d = DB::transaction(function () use ($r, $id) {
             $profile = $r->user()->riderProfile()->lockForUpdate()->first();
             if ($r->user()->status !== 'active' || !$profile?->is_approved || !$profile->is_available) {
                 return $this->fail('You must be an active, approved, ONLINE rider to accept a new delivery.', 403);
             }
 
-            $d=$this->move($r,$id,'assigned','accepted','accepted_at');
-            return $this->ok($this->resource($d));
+            return $this->move($r,$id,'assigned','accepted','accepted_at');
         });
+        if ($d instanceof \Illuminate\Http\JsonResponse) return $d;
+        Activity::log('accept_delivery', 'deliveries', "Delivery #{$d->id} for order {$d->order?->order_number} (#{$d->order_id}): assigned -> accepted.", (int) $r->user()->id);
+        return $this->ok($this->resource($d));
     }
     public function decline(Request $r,int $id)
     {
         $d=Delivery::with('order')->where('rider_id',$r->user()->id)->where('status','assigned')->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->findOrFail($id);
         DB::transaction(function()use($d,$r){$d->update(['status'=>'declined']);$d->order->update(['status'=>'ready']);$this->log($d->order,$r->user()->id,'ready');});
+        Activity::log('decline_delivery', 'deliveries', "Delivery #{$d->id} for order {$d->order->order_number} (#{$d->order_id}): assigned -> declined; order status -> ready.", (int) $r->user()->id);
         return $this->ok($d->fresh());
     }
     public function pickup(Request $r,int $id)
     {
         $d=$this->move($r,$id,'accepted','picked_up','picked_up_at');
         $d->order->update(['status'=>'picked_up']);$this->log($d->order,$r->user()->id,'picked_up');
+        Activity::log('pickup', 'deliveries', "Delivery #{$d->id} for order {$d->order->order_number} (#{$d->order_id}): accepted -> picked_up.", (int) $r->user()->id);
         Notifier::order($d->order->fresh(),'picked_up');
         return $this->ok($this->resource($d->load('order.user','order.items.options')));
     }
@@ -75,6 +80,7 @@ class RiderController extends Controller
     {
         $d=$this->move($r,$id,'picked_up','on_the_way');
         $d->order->update(['status'=>'on_the_way']);$this->log($d->order,$r->user()->id,'on_the_way');
+        Activity::log('start_delivery', 'deliveries', "Delivery #{$d->id} for order {$d->order->order_number} (#{$d->order_id}): picked_up -> on_the_way.", (int) $r->user()->id);
         Notifier::order($d->order->fresh(),'on_the_way');
         return $this->ok($this->resource($d->load('order.user','order.items.options')));
     }
@@ -89,6 +95,7 @@ class RiderController extends Controller
             if($o->payment_method==='cod') Payment::updateOrCreate(['order_id'=>$o->id],['method'=>'cod','amount'=>$o->total,'status'=>'paid','paid_at'=>now()]);
             $this->log($o,$r->user()->id,'delivered');
         });
+        Activity::log('complete_delivery', 'deliveries', "Delivery #{$d->id} for order {$o->order_number} (#{$o->id}): on_the_way -> delivered.", (int) $r->user()->id);
         Notifier::order($o->fresh(),'delivered');return $this->ok($this->resource($d->fresh()->load('order.user','order.items.options')),'Delivery and proof recorded.');
     }
     public function history(Request $r)

@@ -8,6 +8,7 @@ use App\Http\Controllers\Staff\TransactionController;
 use App\Http\Controllers\Staff\RewardRedemptionController;
 use App\Http\Controllers\Staff\SupportController;
 use App\Http\Controllers\Staff\ShiftController;
+use App\Http\Controllers\Staff\MembershipCardDeliveryController;
 use App\Http\Middleware\EnsureActiveStaffShift;
 use Illuminate\Support\Facades\Route;
 
@@ -22,6 +23,11 @@ Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')-
     Route::put('/profile/password',[ProfileController::class,'updatePassword'])->name('profile.password');
     Route::post('/profile/avatar',[ProfileController::class,'updateAvatar'])->name('profile.avatar');
     Route::get('/support',[SupportController::class,'index'])->name('support');
+    Route::get('/membership-card-deliveries',[MembershipCardDeliveryController::class,'index'])->name('membership-card-deliveries.index');
+    Route::get('/membership-card-deliveries/notifications',[MembershipCardDeliveryController::class,'notifications'])->name('membership-card-deliveries.notifications');
+    Route::post('/membership-card-deliveries/{id}/preparing',[MembershipCardDeliveryController::class,'preparing'])->whereNumber('id')->name('membership-card-deliveries.preparing');
+    Route::post('/membership-card-deliveries/{id}/ready',[MembershipCardDeliveryController::class,'ready'])->whereNumber('id')->name('membership-card-deliveries.ready');
+    Route::post('/membership-card-deliveries/{id}/assign',[MembershipCardDeliveryController::class,'assign'])->whereNumber('id')->name('membership-card-deliveries.assign');
     Route::post('/support',[SupportController::class,'send'])->name('support.send')->middleware('throttle:20,1');
     Route::get('/support/{conversation}/poll',[SupportController::class,'poll'])->name('support.poll');
     Route::get('/pos/{order}/receipt',[PosController::class,'receipt'])->name('pos.receipt');

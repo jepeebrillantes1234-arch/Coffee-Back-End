@@ -11,5 +11,6 @@ class Membership extends Model
     public function payments() { return $this->hasMany(MembershipPayment::class); }
     public function transactions() { return $this->hasMany(LoyaltyTransaction::class); }
     public function redemptions() { return $this->hasMany(RewardRedemption::class); }
+    public function cardPrints() { return $this->hasMany(MembershipCardPrint::class)->orderBy('print_number'); }
     public function isActive(): bool { return $this->status === 'active' && (!$this->expires_at || $this->expires_at->isFuture()); }
 }

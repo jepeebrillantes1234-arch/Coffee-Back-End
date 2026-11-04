@@ -14,6 +14,8 @@ use App\Http\Controllers\Admin\ProductOptionController;
 use App\Http\Controllers\Admin\PromoController;
 use App\Http\Controllers\Admin\HomePromoController;
 use App\Http\Controllers\Admin\MembershipController;
+use App\Http\Controllers\Admin\MembershipCardDeliveryController;
+use App\Http\Controllers\Admin\NotificationHistoryController;
 use App\Http\Controllers\Admin\RewardController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReviewController;
@@ -52,6 +54,9 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('support', [SupportChatController::class, 'index'])->name('support.index');
     Route::get('support/poll', [SupportChatController::class, 'pollInbox'])->name('support.poll');
     Route::get('support/notifications', [SupportChatController::class, 'notifications'])->name('support.notifications');
+    Route::get('notifications', [NotificationHistoryController::class, 'index'])->name('notifications.index');
+    Route::get('notifications/unread-count', [NotificationHistoryController::class, 'unreadCount'])->name('notifications.unread-count');
+    Route::get('notifications/{notification}', [NotificationHistoryController::class, 'show'])->whereNumber('notification')->name('notifications.show');
     Route::get('support/{conversation}', [SupportChatController::class, 'show'])->name('support.show');
     Route::get('support/{conversation}/poll', [SupportChatController::class, 'pollConversation'])->name('support.conversation-poll');
     Route::post('support/{conversation}/reply', [SupportChatController::class, 'reply'])->name('support.reply');
@@ -110,6 +115,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     // Deliveries, GPS
     Route::get('deliveries',       [DeliveryController::class, 'index'])->name('deliveries.index');
+    Route::get('membership-card-deliveries', [MembershipCardDeliveryController::class, 'index'])->name('membership-card-deliveries.index');
     Route::post('deliveries/{delivery}/remit', [DeliveryController::class, 'remit'])->name('deliveries.remit');
     Route::get('gps-monitor',      [GpsMonitorController::class, 'index'])->name('gps.index');
     Route::get('gps-monitor/data', [GpsMonitorController::class, 'data'])->name('gps.data');
@@ -120,6 +126,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::put('memberships/settings', [MembershipController::class, 'updateSettings'])->name('memberships.settings.update');
     Route::get('memberships/{membership}', [MembershipController::class, 'show'])->whereNumber('membership')->name('memberships.show');
     Route::post('memberships/{membership}/toggle', [MembershipController::class, 'toggle'])->whereNumber('membership')->name('memberships.toggle');
+    Route::post('memberships/{membership}/card/printed', [MembershipController::class, 'markCardPrinted'])->whereNumber('membership')->name('memberships.card.printed');
+    Route::post('memberships/{membership}/card/reprint', [MembershipController::class, 'reprintCard'])->whereNumber('membership')->name('memberships.card.reprint');
     Route::post('redemptions/{redemption}/claim', [MembershipController::class, 'claim'])->whereNumber('redemption')->name('redemptions.claim');
     Route::resource('rewards', RewardController::class)->except('show');
     Route::post('rewards/{reward}/toggle', [RewardController::class, 'toggle'])->name('rewards.toggle');

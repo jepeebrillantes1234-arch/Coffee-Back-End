@@ -48,8 +48,8 @@ class OrderController extends Controller
         $requestedCheckoutId = $data['checkout_request_id'] ?? null;
         unset($data['checkout_request_id']);
         $method=$data['payment_method']??(($data['order_type']==='delivery')?(config('shop.payment','cod')==='online'?'qrph':'cod'):(config('shop.payment','cod')==='online'?'qrph':'cash'));
-        // Avoid changing the existing QRPh gateway/session flow; request idempotency applies to cash/COD orders.
-        $checkoutRequestId = $method === 'qrph' ? null : $requestedCheckoutId;
+        // The same checkout request ID lets a QRPh setup retry reuse its existing order.
+        $checkoutRequestId = $requestedCheckoutId;
         $payloadHash = hash('sha256', json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
         if($method==='qrph' && (config('shop.payment','cod')!=='online' || !(bool)((int)Settings::get('payment_qrph_enabled',1)))) return $this->fail('QRPh payment is currently unavailable.');
         if($method==='qrph' && config('paymongo.mode')!=='simulated' && !filled(config('paymongo.secret'))) return $this->fail('Online payment is not configured yet. Please choose Cash on Delivery or contact the shop.',503);
@@ -98,10 +98,10 @@ class OrderController extends Controller
             try {
                 $checkout = app(PaymentGateway::class)->createCheckout($order);
             } catch (\Throwable $e) {
-                $order->update(['status' => 'cancelled', 'reject_reason' => 'Payment checkout could not be created.']);
-                $this->log($order, null);
+                // Keep the order awaiting payment. Retrying the same checkout request
+                // reuses this order and the existing local/provider payment attempt.
                 report($e);
-                return $this->fail('Could not start QRPh checkout. No payment was confirmed; try again or choose Cash on Delivery.', 502);
+                return $this->fail('Could not start QRPh checkout. No payment was confirmed. Retry to continue this order.', 502);
             }
         }
         return $this->ok(['order'=>$this->clientOrder($order->fresh()->load(['items.options','items.product','review','payments'])),'checkout'=>$checkout], 'Nagawa ang order',201);
@@ -139,6 +139,8 @@ class OrderController extends Controller
         }
         if (!(bool)((int)Settings::get('payment_qrph_enabled',1))) return $this->fail('QRPh payment is currently unavailable.');
         $checkout=app(PaymentGateway::class)->createCheckout($o);
+        $checkout['payment_attempt_status'] = $checkout['status'] ?? null;
+        unset($checkout['status']);
         return $this->ok(array_merge(
             $this->clientOrder($o->fresh()->load(['items.options','items.product','review','payments'])),
             $checkout,
@@ -160,11 +162,23 @@ class OrderController extends Controller
         try {
             DB::transaction(function () use ($o, $request, $data) {
                 $locked = Order::whereKey($o->id)->lockForUpdate()->firstOrFail();
-                if ($locked->status !== 'pending') {
+                if (! in_array($locked->status, ['awaiting_payment', 'pending'], true)) {
                     throw new \DomainException('This order can no longer be cancelled because it has already progressed.');
                 }
+
+                $payments = Payment::where('order_id', $locked->id)->lockForUpdate()->get();
+                $hasPaidPayment = $locked->payment_status === 'paid'
+                    || $payments->contains(fn (Payment $payment) => $payment->status === 'paid');
+                if ($hasPaidPayment) {
+                    throw new \DomainException('This payment is already confirmed. Contact Customer Service to request cancellation and any applicable refund.');
+                }
+
                 $locked->update(['status'=>'cancelled','reject_reason'=>$data['reason']]);
                 app(\App\Services\LoyaltyService::class)->restoreForOrder($locked);
+                Payment::where('order_id', $locked->id)
+                    ->where('method', 'qrph')
+                    ->where('status', 'pending')
+                    ->update(['qr_expires_at' => now()]);
                 $this->log($locked,$request->user()->id);
                 $o->refresh();
             });
@@ -325,6 +339,9 @@ class OrderController extends Controller
     private function clientOrder(Order $o):array
     {
         $o->loadMissing(['items.options','items.product','review','payments']);
+        $hasPaidPayment = $o->payment_status === 'paid'
+            || $o->payments->contains(fn (Payment $payment) => $payment->status === 'paid');
+        $canCustomerCancel = in_array($o->status, ['awaiting_payment', 'pending'], true) && ! $hasPaidPayment;
         $payment=$o->payments->sortByDesc('id')->first();
         return ['id'=>$o->id,'order_number'=>$o->order_number,'order_type'=>$o->order_type,'status'=>$o->status,
             'subtotal'=>(float)$o->subtotal,'discount'=>(float)$o->discount,
@@ -332,7 +349,9 @@ class OrderController extends Controller
             'membership_discount_percent'=>(float)($o->membership_discount_percent ?? 0),
             'promo_discount'=>(float)($o->promo_discount ?? 0),'first_order_discount'=>(float)($o->first_order_discount ?? 0),
             'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,
-            'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'delivery_address'=>$o->delivery_address,
+            'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,
+            'payment_attempt_status'=>$payment ? (($payment->status === 'pending' && $payment->qr_expires_at?->isPast()) ? 'expired' : $payment->status) : null,
+            'delivery_address'=>$o->delivery_address,
             'delivery_lat'=>$o->delivery_lat,'delivery_lng'=>$o->delivery_lng,'notes'=>$o->notes,'reject_reason'=>$o->reject_reason,
             'created_at'=>$o->created_at?->toIso8601String(),'checkout_url'=>$payment?->checkout_url,
             'payment_reference'=>$o->order_number,
@@ -343,7 +362,9 @@ class OrderController extends Controller
                 ?? $o->created_at?->copy()->addMinutes((int)config('paymongo.timeout_minutes',30))->toIso8601String(),
             'can_pay'=>$o->payment_method==='qrph' && $o->payment_status==='unpaid' && $o->status==='awaiting_payment'
                 && (bool)((int)Settings::get('payment_qrph_enabled',1)),
-            'can_cancel'=>$o->status==='pending','has_review'=>$o->review!==null,
+            'can_cancel'=>$canCustomerCancel,
+            'cancellation_requires_staff'=>$o->payment_method==='qrph' && $hasPaidPayment && in_array($o->status, ['awaiting_payment','pending'], true),
+            'has_review'=>$o->review!==null,
 'items'=>$o->items->map(fn($i)=>['qty'=>$i->quantity,'name'=>$i->product_name,'image_url'=>$i->product?->image_url,'line_total'=>(float)$i->total_price,'options'=>$i->options->pluck('option_name')->values()])->values()];
     }
 

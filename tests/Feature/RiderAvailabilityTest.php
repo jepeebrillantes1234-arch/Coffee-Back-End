@@ -15,6 +15,14 @@ class RiderAvailabilityTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        config(['logging.default' => 'stderr', 'view.compiled' => sys_get_temp_dir()]);
+        app()->forgetInstance('blade.compiler');
+        app()->forgetInstance('view.engine.resolver');
+    }
+
     public function test_automatic_assignment_only_selects_an_online_active_approved_rider(): void
     {
         $offline = $this->rider(online: false);
@@ -72,6 +80,11 @@ class RiderAvailabilityTest extends TestCase
             'title' => 'New Delivery Assignment',
             'type' => 'delivery',
         ]);
+        $this->assertDatabaseHas('activity_logs', [
+            'user_id' => $online->id,
+            'action' => 'accept_delivery',
+            'module' => 'deliveries',
+        ]);
     }
 
     public function test_offline_rider_cannot_accept_a_newly_assigned_delivery(): void
@@ -119,6 +132,25 @@ class RiderAvailabilityTest extends TestCase
 
         $this->assertSame('picked_up', $delivery->fresh()->status);
         $this->assertSame('picked_up', $order->fresh()->status);
+    }
+
+    public function test_rider_accept_pickup_and_start_actions_are_audited_after_success(): void
+    {
+        $rider = $this->rider(online: true);
+        $order = $this->readyOrder();
+        $delivery = Delivery::create(['order_id' => $order->id, 'rider_id' => $rider->id, 'status' => 'assigned']);
+
+        $this->actingAs($rider, 'sanctum')->postJson("/api/v1/rider/deliveries/{$delivery->id}/accept")->assertOk();
+        $this->postJson("/api/v1/rider/deliveries/{$delivery->id}/pickup")->assertOk();
+        $this->postJson("/api/v1/rider/deliveries/{$delivery->id}/start")->assertOk();
+
+        foreach (['accept_delivery', 'pickup', 'start_delivery'] as $action) {
+            $this->assertDatabaseHas('activity_logs', [
+                'user_id' => $rider->id,
+                'action' => $action,
+                'module' => 'deliveries',
+            ]);
+        }
     }
 
     public function test_online_rider_can_receive_multiple_active_deliveries(): void

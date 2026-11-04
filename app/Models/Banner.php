@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Storage;
 class Banner extends Model
 {
     protected $guarded = [];
-    protected $casts = ['is_active' => 'boolean', 'starts_at' => 'datetime', 'ends_at' => 'datetime'];
+    protected $casts = ['is_active' => 'boolean', 'show_as_popup' => 'boolean', 'starts_at' => 'datetime', 'ends_at' => 'datetime'];
     protected $appends = ['image_url', 'description'];
 
     public function getImageUrlAttribute(): ?string
