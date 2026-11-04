@@ -128,7 +128,7 @@
 
   body.staff-shell[data-staff-theme=dark] .staff-logout-form button{background:#382320;border-color:#5b322d;color:#ffaaa0}
 
-  @media(min-width:801px){body.staff-shell.staff-collapsed .staff-sidebar{width:82px;padding:0 10px}body.staff-shell.staff-collapsed .staff-brand{justify-content:center;padding:12px 0}body.staff-shell.staff-collapsed .staff-brand>span,body.staff-shell.staff-collapsed .staff-nav small,body.staff-shell.staff-collapsed .staff-nav a{justify-content:center;font-size:0;padding:13px 5px}body.staff-shell.staff-collapsed .staff-nav a>span:first-child{font-size:19px}body.staff-shell.staff-collapsed .staff-nav .staff-nav-count{font-size:9px;padding:2px 5px}body.staff-shell.staff-collapsed>header,body.staff-shell.staff-collapsed>main{margin-left:82px}}
+  @media(min-width:1025px){body.staff-shell.staff-collapsed .staff-sidebar{width:82px;padding:0 10px}body.staff-shell.staff-collapsed .staff-brand{justify-content:center;padding:12px 0}body.staff-shell.staff-collapsed .staff-brand>span{display:none}body.staff-shell.staff-collapsed .staff-nav small,body.staff-shell.staff-collapsed .staff-nav a{justify-content:center;font-size:0;padding:13px 5px}body.staff-shell.staff-collapsed .staff-nav a>span:first-child{font-size:19px}body.staff-shell.staff-collapsed .staff-nav .staff-nav-count{font-size:9px;padding:2px 5px}body.staff-shell.staff-collapsed>header,body.staff-shell.staff-collapsed>main{margin-left:82px}}
 
   body.staff-shell>main h1{font-size:25px;font-weight:700;letter-spacing:-.03em;color:#202734;margin-bottom:18px}
 
@@ -177,6 +177,7 @@
     body.staff-shell.staff-collapsed .staff-nav a{justify-content:flex-start;font-size:13px;padding:13px 12px}
     body.staff-shell.staff-collapsed .staff-nav .staff-nav-count{font-size:10px;padding:2px 8px;margin-left:auto}
     body.staff-shell>header,body.staff-shell>main{margin-left:0}
+    body.staff-shell.staff-collapsed>header,body.staff-shell.staff-collapsed>main{margin-left:0}
     .staff-mobile-shade{display:none;position:fixed;inset:0;background:#21150f75;z-index:35}
     .staff-mobile-open .staff-mobile-shade{display:block}
     body.staff-shell>header>div{padding:10px 13px}
