@@ -207,6 +207,54 @@ class PaymongoPaymentIntentQrphTest extends TestCase
             ->assertJsonPath('data.payment_attempt_status', 'failed');
     }
 
+    public function test_generic_qr_paid_event_does_not_mark_an_unmatched_payment_intent_order_paid(): void
+    {
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-QR-RESOURCE-PAID');
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_test_qr_resource_paid',
+            'amount' => 125,
+            'status' => 'pending',
+            'qr_expires_at' => now()->addMinutes(10),
+        ]);
+        $body = $this->genericQrWebhook('qr.paid', 'paid');
+
+        $this->postWebhook($body)->assertOk();
+        $this->postWebhook($body)->assertOk();
+
+        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->assertSame('pending', $payment->fresh()->status);
+        $this->assertNull($payment->fresh()->provider_payment_id);
+        $this->assertNull($payment->fresh()->paid_at);
+    }
+
+    public function test_generic_qr_expired_event_does_not_expire_an_unmatched_payment_intent_order(): void
+    {
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-QR-RESOURCE-EXPIRED');
+        $expiresAt = now()->addMinutes(10)->startOfSecond();
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_test_qr_resource_expired',
+            'amount' => 125,
+            'status' => 'pending',
+            'qr_expires_at' => $expiresAt,
+        ]);
+        $body = $this->genericQrWebhook('qr.expired', 'expired');
+
+        $this->postWebhook($body)->assertOk();
+        $this->postWebhook($body)->assertOk();
+
+        $this->assertSame('unpaid', $order->fresh()->payment_status);
+        $this->assertSame('pending', $payment->fresh()->status);
+        $this->assertSame($expiresAt->timestamp, $payment->fresh()->qr_expires_at->timestamp);
+    }
+
     public function test_membership_checkout_returns_qr_without_exposing_provider_intent_or_secret(): void
     {
         $customer = $this->user('customer');
@@ -262,7 +310,15 @@ class PaymongoPaymentIntentQrphTest extends TestCase
 
     public function test_late_paid_webhook_does_not_reactivate_a_cancelled_order(): void
     {
-        Http::fake(['*' => Http::response(['data' => ['id' => 're_test_late_order']], 200)]);
+        Http::fake(function ($request) {
+            if ($request->method() === 'POST' && str_ends_with($request->url(), '/refunds')) {
+                return Http::response(['data' => ['id' => 're_test_late_order', 'type' => 'refund', 'attributes' => [
+                    'payment_id' => 'pay_test_late_cancelled', 'amount' => 12500, 'currency' => 'PHP', 'status' => 'succeeded',
+                    'notes' => data_get($request->data(), 'data.attributes.notes'),
+                ]]], 201);
+            }
+            return Http::response(['errors' => [['code' => 'unexpected_request']]], 500);
+        });
 
         $customer = $this->user('customer');
         $order = $this->order($customer, 'KJM-PI-LATE-CANCELLED');
@@ -290,6 +346,8 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         $this->assertSame('cancelled', $order->fresh()->status);
         $this->assertSame('refunded', $order->fresh()->payment_status);
         $this->assertSame('refunded', $order->payments()->first()->status);
+        $this->assertDatabaseHas('refund_requests', ['order_id' => $order->id, 'source' => 'late_payment', 'status' => 'refunded']);
+        $this->assertDatabaseHas('refund_attempts', ['provider_refund_id' => 're_test_late_order', 'status' => 'succeeded']);
         Http::assertSent(fn ($request) => str_contains($request->url(), '/refunds')
             && data_get($request->data(), 'data.attributes.payment_id') === 'pay_test_late_cancelled');
     }
@@ -379,6 +437,159 @@ class PaymongoPaymentIntentQrphTest extends TestCase
         });
     }
 
+    public function test_unpaid_qrph_order_is_cancelled_archived_and_hidden_after_thirty_minutes(): void
+    {
+        config(['paymongo.timeout_minutes' => 30]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-EXPIRED-30M');
+        $order->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        $payment = Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'amount' => 125,
+            'status' => 'pending',
+        ]);
+
+        $this->assertSame(1, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('cancelled', $order->fresh()->status);
+        $this->assertNotNull($order->fresh()->customer_archived_at);
+        $this->assertSame('expired', $payment->fresh()->status);
+        $this->assertDatabaseHas('order_status_logs', ['order_id' => $order->id, 'status' => 'cancelled']);
+        $this->assertSame(0, app(PaymentGateway::class)->expireStale(), 'Repeated scheduler runs must not create another expiry.');
+
+        $this->actingAs($customer, 'sanctum')
+            ->getJson('/api/v1/orders')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->assertDatabaseHas('orders', ['id' => $order->id, 'status' => 'cancelled']);
+    }
+
+    public function test_active_qr_deadline_takes_precedence_over_older_order_creation_time(): void
+    {
+        config(['paymongo.timeout_minutes' => 30]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-ACTIVE-QR-DEADLINE');
+        $order->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'amount' => 125,
+            'status' => 'pending',
+            'qr_expires_at' => now()->addMinutes(5),
+        ]);
+        Http::fake();
+
+        $this->assertSame(0, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertNull($order->fresh()->customer_archived_at);
+        Http::assertNothingSent();
+    }
+    public function test_expiration_uses_qr_deadline_even_when_order_timeout_differs(): void
+    {
+        config(['paymongo.timeout_minutes' => 60]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-QR-DEADLINE-EXPIRED');
+        $order->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'amount' => 125,
+            'status' => 'pending',
+            'qr_expires_at' => now()->subSecond(),
+        ]);
+        Http::fake();
+
+        $this->assertSame(1, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('cancelled', $order->fresh()->status);
+        Http::assertNothingSent();
+    }
+    public function test_qrph_order_younger_than_thirty_minutes_remains_available(): void
+    {
+        config(['paymongo.timeout_minutes' => 30]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-NOT-EXPIRED');
+        $order->forceFill(['created_at' => now()->subMinutes(29)])->save();
+
+        $this->assertSame(0, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertNull($order->fresh()->customer_archived_at);
+    }
+
+    public function test_expiration_does_not_hide_order_when_provider_cannot_confirm_payment_state(): void
+    {
+        config(['paymongo.timeout_minutes' => 30]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-UNKNOWN-PAYMENT');
+        $order->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_unavailable_status',
+            'amount' => 125,
+            'status' => 'pending',
+        ]);
+        Http::fake(['*' => Http::response([], 503)]);
+
+        $this->assertSame(0, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertNull($order->fresh()->customer_archived_at);
+    }
+
+    public function test_expiration_does_not_cancel_intent_confirmed_paid_by_provider_before_webhook(): void
+    {
+        config(['paymongo.timeout_minutes' => 30]);
+        $customer = $this->user('customer');
+        $order = $this->order($customer, 'KJM-PROVIDER-PAID');
+        $order->forceFill(['created_at' => now()->subMinutes(31)])->save();
+        Payment::create([
+            'order_id' => $order->id,
+            'method' => 'qrph',
+            'provider' => 'paymongo',
+            'provider_intent_id' => 'pi_confirmed_paid',
+            'amount' => 125,
+            'status' => 'pending',
+        ]);
+        Http::fake(['*' => Http::response(['data' => [
+            'id' => 'pi_confirmed_paid',
+            'attributes' => ['status' => 'succeeded', 'payments' => []],
+        ]], 200)]);
+
+        $this->assertSame(0, app(PaymentGateway::class)->expireStale());
+        $this->assertSame('awaiting_payment', $order->fresh()->status);
+        $this->assertNull($order->fresh()->customer_archived_at);
+    }
+
+    private function genericQrWebhook(string $type, string $status): string
+    {
+        return json_encode([
+            'id' => 'evt_test_' . str_replace('.', '_', $type),
+            'type' => 'event',
+            'attributes' => [
+                'type' => $type,
+                'livemode' => false,
+                'data' => [
+                    'id' => 'qr_test_resource',
+                    'nation' => 'ph',
+                    'type' => 'dynamic',
+                    'mode' => 'p2m',
+                    'status' => $status,
+                    'metadata' => [
+                        'provider_reference_number' => 'provider-transaction-reference',
+                        'reference_number' => 'provider-transfer-reference',
+                        'transfer_id' => 'tr_test_resource',
+                    ],
+                    'transaction_currency' => 'PHP',
+                    'transaction_amount' => 12500,
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+    }
+
     private function paymentWebhook(string $type, string $intentId, string $paymentId, int $amount): string
     {
         return json_encode(['data' => ['attributes' => [
@@ -423,6 +634,7 @@ class PaymongoPaymentIntentQrphTest extends TestCase
             'username' => $role . Str::lower(Str::random(8)),
             'email' => Str::lower(Str::random(12)) . '@example.test',
             'password' => 'password',
+            'phone' => '09' . random_int(100000000, 999999999),
             'role' => $role,
             'status' => 'active',
         ]);

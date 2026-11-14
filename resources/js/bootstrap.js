@@ -12,21 +12,48 @@ window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
 import './echo';
 
 
-if (window.Echo) {
-    const reportConnection = connected => window.dispatchEvent(new CustomEvent('live-connection', {
+const dispatchConnectionState = connected => {
+    window.staffLiveConnected = connected;
+    window.dispatchEvent(new CustomEvent('live-connection', {
         detail: { connected },
     }));
+};
+
+if (!window.Echo) {
+    dispatchConnectionState(false);
+} else {
+    const connection = window.Echo.connector.pusher.connection;
+    let socketConnected = connection.state === 'connected';
+    let channelSubscribed = false;
+    let lastReportedState = null;
+
+    const reportConnection = () => {
+        const connected = socketConnected && channelSubscribed;
+        if (connected === lastReportedState) return;
+        lastReportedState = connected;
+        dispatchConnectionState(connected);
+    };
+
+    // This bootstrap owns the only staff.updates subscription. Report online
+    // only when both the socket and private channel are ready.
+    connection.bind('state_change', state => {
+        socketConnected = state.current === 'connected';
+        if (!socketConnected) channelSubscribed = false;
+        reportConnection();
+    });
 
     const channel = window.Echo.private('staff.updates');
-    channel.subscribed(() => reportConnection(true));
-    channel.error(() => reportConnection(false));
+    channel.subscribed(() => {
+        channelSubscribed = true;
+        reportConnection();
+    });
+    channel.error(() => {
+        channelSubscribed = false;
+        reportConnection();
+    });
     channel.listen('.live.updated', event => {
         window.dispatchEvent(new CustomEvent('live-update', { detail: event }));
     });
 
-    // A socket can drop after the channel was authorized. Keep the UI honest
-    // and let the orders page use its lightweight partial fallback meanwhile.
-    window.Echo.connector.pusher.connection.bind('state_change', state => {
-        if (state.current !== 'connected') reportConnection(false);
-    });
+    reportConnection();
 }

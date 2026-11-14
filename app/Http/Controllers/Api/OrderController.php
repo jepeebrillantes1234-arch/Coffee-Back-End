@@ -57,8 +57,8 @@ class OrderController extends Controller
         if($data['order_type']==='pickup' && $method==='cod') return $this->fail('Cash sa counter o QRPh ang bayad para sa pickup.');
         $quote=null;$created=false;
         $order=DB::transaction(function()use($request,$data,$method,$checkoutRequestId,$payloadHash,&$quote,&$created){
+            $lockedUser = User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
             if ($checkoutRequestId !== null) {
-                User::whereKey($request->user()->id)->lockForUpdate()->firstOrFail();
                 $existing = Order::where('user_id', $request->user()->id)->where('checkout_request_id', $checkoutRequestId)->first();
                 if ($existing) {
                     if (!hash_equals((string) $existing->checkout_payload_hash, $payloadHash)) {
@@ -68,9 +68,11 @@ class OrderController extends Controller
                 }
             }
             if (!ShopOperatingHours::isOpen()) throw ValidationException::withMessages(['shop' => 'Online ordering is currently closed. Please order during the shop operating hours.']);
-            $quote=$this->quote($request->user(),$data,true);
+            $lockedUser->phone = $data['contact_phone'];
+            $lockedUser->save();
+            $quote=$this->quote($lockedUser,$data,true);
             $o=Order::create(['order_number'=>'KJM-'.now()->format('ymd').'-'.Str::upper(Str::random(6)),
-                'user_id'=>$request->user()->id,'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
+                'user_id'=>$lockedUser->id,'customer_phone'=>$data['contact_phone'],'order_type'=>$data['order_type'],'status'=>$method==='qrph'?'awaiting_payment':'pending',
                 'subtotal'=>$quote['subtotal'],'discount'=>$quote['discount'],
                 'membership_discount_amount'=>$quote['membership_discount'],'membership_discount_percent'=>$quote['membership_discount_percent'],
                 'promo_discount'=>$quote['promo_discount'],'first_order_discount'=>$quote['first_order_discount'],
@@ -203,7 +205,7 @@ class OrderController extends Controller
             || ($delivery && in_array($delivery->status,['delivered','completed','cancelled','rejected'],true));
         if(!$finished && $delivery && $delivery->rider){$profile=$delivery->rider->riderProfile;$rider=['name'=>$delivery->rider->name,'phone'=>$delivery->rider->phone,'avatar_url'=>$delivery->rider->avatar ? '/storage/'.ltrim($delivery->rider->avatar,'/') : null,'plate_number'=>$profile?->plate_number,'status'=>$delivery->status,'lat'=>null,'lng'=>null,'last_updated_at'=>null,'eta_min'=>null];}
         $latestLocation=null;
-        if(!$finished && $delivery && $delivery->rider && in_array($delivery->status,['accepted','picked_up','on_the_way','out_for_delivery'],true)){
+        if(!$finished && $delivery && $delivery->rider && in_array($delivery->status,['assigned','accepted','picked_up','on_the_way','out_for_delivery'],true)){
             $latestLocation=DB::table('rider_locations')->where('delivery_id',$delivery->id)->where('rider_id',$delivery->rider_id)->orderByDesc('recorded_at')->orderByDesc('id')->first();
             if ($latestLocation && \Illuminate\Support\Carbon::parse($latestLocation->recorded_at)->lt(now()->subSeconds(30))) {
                 $latestLocation = null;
@@ -239,7 +241,18 @@ class OrderController extends Controller
 
     private function validateCheckout(Request $r,bool $forOrder):array
     {
+        $contactPhone = $r->input('contact_phone', $r->user()?->phone);
+        if (is_string($contactPhone)) {
+            $contactPhone = preg_replace('/[\s()\-]/', '', $contactPhone);
+            if (str_starts_with($contactPhone, '+63')) $contactPhone = '0' . substr($contactPhone, 3);
+            elseif (str_starts_with($contactPhone, '63')) $contactPhone = '0' . substr($contactPhone, 2);
+            $r->merge(['contact_phone' => $contactPhone]);
+        }
+        $phoneRules = $forOrder
+            ? ['required', 'string', 'regex:/^09\d{9}$/', \Illuminate\Validation\Rule::unique('users', 'phone')->ignore($r->user()->id)]
+            : ['nullable', 'string', 'regex:/^09\d{9}$/'];
         return $r->validate(['items'=>'nullable|array|max:50','items.*.product_id'=>'required|integer|exists:products,id',
+            'contact_phone' => $phoneRules,
             'home_promos'=>'nullable|array|max:20','home_promos.*.home_promo_id'=>'required|integer|exists:home_promos,id','home_promos.*.quantity'=>'required|integer|min:1|max:20',
             'items.*.quantity'=>'required|integer|min:1|max:50','items.*.option_ids'=>'nullable|array','items.*.option_ids.*'=>'integer',
             'items.*.notes'=>'nullable|string|max:255','order_type'=>($forOrder?'required':'nullable').'|in:delivery,pickup',
@@ -351,7 +364,7 @@ class OrderController extends Controller
             'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,
             'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,
             'payment_attempt_status'=>$payment ? (($payment->status === 'pending' && $payment->qr_expires_at?->isPast()) ? 'expired' : $payment->status) : null,
-            'delivery_address'=>$o->delivery_address,
+            'delivery_address'=>$o->delivery_address,'customer_phone'=>$o->customer_phone ?? $o->user?->phone,
             'delivery_lat'=>$o->delivery_lat,'delivery_lng'=>$o->delivery_lng,'notes'=>$o->notes,'reject_reason'=>$o->reject_reason,
             'created_at'=>$o->created_at?->toIso8601String(),'checkout_url'=>$payment?->checkout_url,
             'payment_reference'=>$o->order_number,

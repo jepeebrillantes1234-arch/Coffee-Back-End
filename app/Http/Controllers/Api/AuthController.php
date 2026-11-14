@@ -31,7 +31,7 @@ class AuthController extends Controller
             'name'                  => 'required|string|max:100',
             'username'              => ['required', 'string', 'min:3', 'max:30', 'regex:/^[A-Za-z0-9_]+$/', 'unique:users,username'],
             'email'                 => 'required|email|max:150|unique:users,email',
-            'phone'                 => 'nullable|string|max:20|unique:users,phone',
+            'phone'                 => ['required', 'string', 'regex:/^09\d{9}$/', 'unique:users,phone'],
             'password'              => 'required|string|min:8|confirmed',
         ]);
         $data['username'] = strtolower($data['username']);

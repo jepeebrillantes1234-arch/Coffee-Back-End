@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\DeliveryController;
 use App\Http\Controllers\Admin\GpsMonitorController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\PaymentController;
+use App\Http\Controllers\Admin\RefundManagementController;
 use App\Http\Controllers\Admin\ProfileController;
 use App\Http\Controllers\Admin\SupportChatController;
 use App\Http\Controllers\Admin\ProductController;
@@ -24,6 +25,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\StaffShiftController;
 use App\Http\Controllers\Auth\WebLoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
+use App\Http\Controllers\Admin\SessionManagementController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -49,6 +51,7 @@ Route::get('/password-reset-done', [PasswordResetController::class, 'done'])->na
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+    Route::post('security/sessions/invalidate-all', [SessionManagementController::class, 'invalidateAllWebSessions'])->name('sessions.invalidate-all');
     Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('support', [SupportChatController::class, 'index'])->name('support.index');
@@ -133,6 +136,13 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('rewards/{reward}/toggle', [RewardController::class, 'toggle'])->name('rewards.toggle');
     // Payments, Reviews
     Route::get('payments',                 [PaymentController::class, 'index'])->name('payments.index');
+    Route::get('refunds', [RefundManagementController::class, 'index'])->name('refunds.index');
+    Route::get('refunds/{refundRequest}', [RefundManagementController::class, 'show'])->whereNumber('refundRequest')->name('refunds.show');
+    Route::post('refunds/{refundRequest}/approve', [RefundManagementController::class, 'approve'])->whereNumber('refundRequest')->name('refunds.approve');
+    Route::post('refunds/{refundRequest}/reject', [RefundManagementController::class, 'reject'])->whereNumber('refundRequest')->name('refunds.reject');
+    Route::post('refunds/{refundRequest}/process', [RefundManagementController::class, 'process'])->whereNumber('refundRequest')->name('refunds.process');
+    Route::post('refunds/{refundRequest}/reconcile', [RefundManagementController::class, 'reconcile'])->whereNumber('refundRequest')->name('refunds.reconcile');
+    Route::get('refunds/{refundRequest}/attachments/{index}', [RefundManagementController::class, 'attachment'])->whereNumber('refundRequest')->whereNumber('index')->name('refunds.attachment');
     Route::get('payments/settings', [PaymentController::class, 'settings'])->name('payments.settings');
     Route::put('payments/settings', [PaymentController::class, 'updateSettings'])->name('payments.settings.update');
     Route::post('payments/{order}/paid',   [PaymentController::class, 'markPaid'])->name('payments.paid');

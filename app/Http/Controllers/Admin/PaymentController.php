@@ -17,7 +17,7 @@ class PaymentController extends Controller
         $request->validate([
             'q' => 'nullable|string|max:120',
             'method' => 'nullable|in:qrph,cash,cod',
-            'status' => 'nullable|in:pending,paid,failed,expired,refunded',
+            'status' => 'nullable|in:pending,paid,failed,expired,refunded,partially_refunded',
             'from' => 'nullable|date_format:Y-m-d',
             'to' => 'nullable|date_format:Y-m-d|after_or_equal:from',
         ]);
@@ -38,6 +38,7 @@ class PaymentController extends Controller
                 $q->whereHas('order', function ($order) use ($status) {
                     if ($status === 'paid') $order->where('payment_status', 'paid');
                     elseif ($status === 'refunded') $order->where('payment_status', 'refunded');
+                    elseif ($status === 'partially_refunded') $order->where('payment_status', 'partially_refunded');
                     elseif ($status === 'pending') $order->where('payment_status', 'unpaid');
                     else $order->whereHas('payments', fn ($p) => $p->where('status', $status));
                 });
@@ -90,16 +91,12 @@ class PaymentController extends Controller
 
     public function refund(Order $order)
     {
-        if ($order->payment_status !== 'paid') return back()->with('error', 'Only paid orders can be refunded.');
         if ($order->payment_method === 'qrph') {
-            try { app(\App\Services\PaymentGateway::class)->refundOrder($order); }
-            catch (\Throwable $e) {
-                Log::error('Payment refund failed', ['order_id' => $order->id, 'exception' => get_class($e)]);
-                return back()->with('error', 'Refund could not be completed. Check the payment provider dashboard.');
-            }
-        } else {
-            $this->setStatus($order, 'refunded');
+            return redirect()->route('admin.refunds.index', ['q' => $order->order_number])
+                ->with('error', 'QRPh refunds must use the reviewed Refund Management workflow.');
         }
+        if ($order->payment_status !== 'paid') return back()->with('error', 'Only paid orders can be refunded.');
+        $this->setStatus($order, 'refunded');
         Activity::log('refund', 'payments', "Refunded: {$order->order_number}");
         return back()->with('success', 'Payment refunded.');
     }

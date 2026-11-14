@@ -10,6 +10,7 @@ use App\Support\Activity;
 use App\Support\Settings;
 use App\Services\OrderTrackingRouter;
 use Illuminate\Http\Request;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 class RiderController extends Controller
@@ -87,16 +88,33 @@ class RiderController extends Controller
     public function delivered(Request $r,int $id)
     {
         $data=$r->validate(['proof_photo'=>'required|image|max:8192','cash_collected'=>'nullable|numeric|min:0']);
-        $d=Delivery::with(['order.user','order.items.options'])->where('rider_id',$r->user()->id)->where('status','on_the_way')->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->findOrFail($id);$o=$d->order;
-        if($o->payment_method==='cod' && (float)($data['cash_collected']??0)<(float)$o->total) return $this->fail('Enter the cash received. It must be at least the order total.',422);
-        DB::transaction(function()use($r,$data,$d,$o){
+        $result=DB::transaction(function()use($r,$data,$id){
+            $d=Delivery::with(['order.user','order.items.options'])->where('rider_id',$r->user()->id)->lockForUpdate()->findOrFail($id);
+            $o=$d->order;
+
+            // A response may be lost on a slow connection after the first request commits.
+            // Treat a repeat from the same rider as success without recording proof/cash twice.
+            if($d->status==='delivered' && $d->proof_photo && $o && !in_array($o->status,['cancelled','rejected'],true)){
+                return ['delivery'=>$d,'order'=>$o,'newly_completed'=>false];
+            }
+
+            if($d->status!=='on_the_way' || !$o || in_array($o->status,['delivered','completed','cancelled','rejected'],true)){
+                throw (new ModelNotFoundException())->setModel(Delivery::class,[$id]);
+            }
+            if($o->payment_method==='cod' && (float)($data['cash_collected']??0)<(float)$o->total) return ['error'=>$this->fail('Enter the cash received. It must be at least the order total.',422)];
+
             $d->update(['status'=>'delivered','delivered_at'=>now(),'proof_photo'=>$r->file('proof_photo')->store('delivery-proofs','public'),'cash_collected_amount'=>$o->payment_method==='cod'?$o->total:null,'cash_collected_at'=>$o->payment_method==='cod'?now():null]);
             $o->update(['status'=>'delivered','payment_status'=>$o->payment_method==='cod'?'paid':$o->payment_status]);
             if($o->payment_method==='cod') Payment::updateOrCreate(['order_id'=>$o->id],['method'=>'cod','amount'=>$o->total,'status'=>'paid','paid_at'=>now()]);
             $this->log($o,$r->user()->id,'delivered');
+
+            return ['delivery'=>$d->fresh()->load('order.user','order.items.options'),'order'=>$o->fresh(),'newly_completed'=>true];
         });
+        if(isset($result['error'])) return $result['error'];
+        $d=$result['delivery'];$o=$result['order'];
+        if(!$result['newly_completed']) return $this->ok($this->resource($d),'Delivery proof was already recorded.');
         Activity::log('complete_delivery', 'deliveries', "Delivery #{$d->id} for order {$o->order_number} (#{$o->id}): on_the_way -> delivered.", (int) $r->user()->id);
-        Notifier::order($o->fresh(),'delivered');return $this->ok($this->resource($d->fresh()->load('order.user','order.items.options')),'Delivery and proof recorded.');
+        Notifier::order($o,'delivered');return $this->ok($this->resource($d),'Delivery and proof recorded.');
     }
     public function history(Request $r)
     {
@@ -120,7 +138,7 @@ class RiderController extends Controller
     public function location(Request $r)
     {
         $data=$r->validate(['delivery_id'=>'required|integer','latitude'=>'required|numeric|between:-90,90','longitude'=>'required|numeric|between:-180,180','speed'=>'nullable|numeric|min:0']);
-        $d=Delivery::where('id',$data['delivery_id'])->where('rider_id',$r->user()->id)->whereIn('status',['accepted','picked_up','on_the_way'])
+        $d=Delivery::where('id',$data['delivery_id'])->where('rider_id',$r->user()->id)->whereIn('status',['assigned','accepted','picked_up','on_the_way'])
             ->whereHas('order',fn($q)=>$q->whereNotIn('status',['delivered','completed','cancelled','rejected']))->firstOrFail();
         DB::table('rider_locations')->insert(['delivery_id'=>$d->id,'rider_id'=>$r->user()->id,'latitude'=>$data['latitude'],'longitude'=>$data['longitude'],'speed'=>$data['speed']??null,'recorded_at'=>now()]);
         $r->user()->riderProfile()->update(['current_lat'=>$data['latitude'],'current_lng'=>$data['longitude'],'last_location_at'=>now()]);try{$d->loadMissing('order');\App\Events\LiveUpdate::dispatch('rider',(int)$r->user()->id,$d->order?->user_id ? (int)$d->order->user_id : null);}catch(\Throwable $exception){report($exception);}return $this->ok(null,'Location recorded.');
@@ -151,7 +169,7 @@ class RiderController extends Controller
             ? ['status'=>'finished','error'=>null,'points'=>[]]
             : app(OrderTrackingRouter::class)->route($o->id,$riderLocation ? ['lat'=>$riderLocation['lat'],'lng'=>$riderLocation['lng']] : null,$destination);
         return ['id'=>$d->id,'status'=>$d->status,'distance_km'=>$d->distance_km,'delivered_at'=>$d->delivered_at?->toIso8601String(),'proof_photo_url'=>$d->proof_photo_url,
-            'customer'=>['name'=>$user?->name,'phone'=>$user?->phone,'avatar_url'=>$user?->avatar ? asset('storage/'.ltrim($user->avatar,'/')) : null],
+            'customer'=>['name'=>$user?->name,'phone'=>$o?->customer_phone ?? $user?->phone,'avatar_url'=>$user?->avatar ? asset('storage/'.ltrim($user->avatar,'/')) : null],
             'shop'=>['lat'=>(float)Settings::get('shop_lat',0),'lng'=>(float)Settings::get('shop_lng',0)],
             'rider_location'=>$riderLocation,'route'=>$route,
             'order'=>$o ? ['id'=>$o->id,'order_number'=>$o->order_number,'created_at'=>$o->created_at?->toIso8601String(),'subtotal'=>(float)$o->subtotal,'delivery_fee'=>(float)$o->delivery_fee,'total'=>(float)$o->total,'payment_method'=>$o->payment_method,'payment_status'=>$o->payment_status,'address'=>$o->delivery_address,'lat'=>$o->delivery_lat,'lng'=>$o->delivery_lng,'notes'=>$o->notes,

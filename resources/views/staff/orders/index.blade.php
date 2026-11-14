@@ -52,14 +52,11 @@
     const orderDialogClose = document.getElementById('order-view-close');
 
     let pendingCount = {{ (int) $pendingCount }};
-    let liveConnected = false;
     let isRefreshing = false;
-    let echoChannel = null;
     let toastTimer;
 
     function updateLiveStatus(connected) {
-        liveConnected = connected;
-        liveLabel.textContent = connected ? 'Live updates connected' : 'Live offline - auto-checking';
+        liveLabel.textContent = connected ? 'Live Online' : 'Live offline - auto-checking';
         liveDot.classList.toggle('bg-emerald-500', connected);
         liveDot.classList.toggle('bg-amber-500', !connected);
     }
@@ -137,7 +134,7 @@
             pendingCount = nextPendingCount;
             setPendingCount(pendingCount);
         } catch (_) {
-            updateLiveStatus(false);
+            // Polling failures do not determine the WebSocket connection state.
         } finally {
             isRefreshing = false;
         }
@@ -147,21 +144,6 @@
         const kind = event?.kind ?? event?.detail?.kind;
         if (!['order', 'delivery', 'payment'].includes(kind)) return;
         refreshOrders();
-    }
-
-    function connectEcho() {
-        if (!window.Echo || echoChannel) return;
-        try {
-            echoChannel = window.Echo.private('staff.updates');
-            echoChannel.subscribed(() => {
-                updateLiveStatus(true);
-                refreshOrders();
-            });
-            echoChannel.error(() => updateLiveStatus(false));
-            echoChannel.listen('.live.updated', handleLiveUpdate);
-        } catch (_) {
-            updateLiveStatus(false);
-        }
     }
 
     notificationsButton.addEventListener('click', async () => {
@@ -176,23 +158,43 @@
         notificationsButton.textContent = 'Notifications on';
     }
 
-    // Support both the shared app bootstrap event and a direct Echo subscription.
-    window.addEventListener('live-update', handleLiveUpdate);
-    window.addEventListener('live-connection', event => updateLiveStatus(event.detail?.connected === true));
-    connectEcho();
+    function handleLiveConnection(event) {
+        updateLiveStatus(event.detail?.connected === true);
+    }
 
-    // WebSocket events update the queue immediately. Keep a lightweight
-    // reconciliation request as a watchdog in case a broadcast is lost.
-    // This updates only the order fragment and never reloads the page.
-    window.setInterval(() => {
-        connectEcho();
-        refreshOrders();
-    }, 5000);
-    document.addEventListener('visibilitychange', () => {
+    function handleVisibilityChange() {
         if (!document.hidden) refreshOrders();
-    });
+    }
+
+    let pollTimer = null;
+
+    function startQueueUpdates() {
+        if (pollTimer !== null) return;
+        window.addEventListener('live-update', handleLiveUpdate);
+        window.addEventListener('live-connection', handleLiveConnection);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // The shared bootstrap may have connected before this listener existed.
+        updateLiveStatus(window.staffLiveConnected === true);
+        pollTimer = window.setInterval(refreshOrders, 5000);
+        refreshOrders();
+    }
+
+    function stopQueueUpdates() {
+        if (pollTimer !== null) {
+            window.clearInterval(pollTimer);
+            pollTimer = null;
+        }
+        window.removeEventListener('live-update', handleLiveUpdate);
+        window.removeEventListener('live-connection', handleLiveConnection);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+        window.clearTimeout(toastTimer);
+    }
+
+    window.addEventListener('pagehide', stopQueueUpdates);
+    window.addEventListener('pageshow', startQueueUpdates);
+    startQueueUpdates();
     setPendingCount(pendingCount);
-    refreshOrders();
 })();
 </script>
 @endpush

@@ -427,7 +427,7 @@
 
     liveIndicator.dataset.connected = connected ? 'true' : 'false';
 
-    liveIndicator.querySelector('span').textContent = connected ? 'Online' : 'Reconnecting';
+    liveIndicator.querySelector('span').textContent = connected ? 'Live Online' : 'Reconnecting';
 
   };
 
@@ -490,6 +490,7 @@
   document.addEventListener('click', event => { if (!event.target.closest('.staff-notification-wrap')) { notificationDropdown.hidden = true; notificationButton.setAttribute('aria-expanded', 'false'); } });
 
   window.addEventListener('live-connection', event => updateConnection(event.detail?.connected === true));
+  updateConnection(window.staffLiveConnected === true);
 
   window.addEventListener('live-update', event => {
 

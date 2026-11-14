@@ -38,9 +38,18 @@
                     <span class="px-1">&middot;</span>{{ strtoupper($order->order_type) }}
                     <span class="px-1">&middot;</span>&#8369;{{ number_format($order->total, 2) }}
                 </p>
-                <p class="mt-1 text-sm text-espresso/80">
-                    {{ $order->items->map(fn ($item) => $item->quantity . ' x ' . $item->product_name)->join(', ') }}
-                </p>
+                <div class="mt-1 grid gap-2 text-sm text-espresso/80">
+                    @foreach($order->items as $item)
+                        <div>
+                            <p class="font-medium">{{ $item->quantity }} x {{ $item->product_name }}</p>
+                            @if(trim((string) $item->notes) !== '')
+                                <p class="mt-1 whitespace-pre-wrap break-words rounded-md border-l-2 border-caramel bg-cream px-2 py-1 text-sm text-espresso">
+                                    <span class="font-semibold">Customer note:</span> {{ $item->notes }}
+                                </p>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
                 @if($order->delivery?->rider)
                     <p class="mt-2 text-sm font-medium text-emerald-700">
                         Rider: {{ $order->delivery->rider->name }}
@@ -93,8 +102,11 @@
                                         @if($item->options->isNotEmpty())
                                             <p class="mt-1 text-espresso/70">Options: {{ $item->options->map(fn ($option) => $option->option_name . ($option->extra_price > 0 ? ' (+₱' . number_format($option->extra_price, 2) . ')' : ''))->join(', ') }}</p>
                                         @endif
-                                        @if($item->notes)
-                                            <p class="mt-1 text-espresso/70">Item note: {{ $item->notes }}</p>
+                                        @if(trim((string) $item->notes) !== '')
+                                            <div class="mt-2 rounded-md border-l-2 border-caramel bg-cream px-2 py-1 text-espresso">
+                                                <p class="font-semibold">Customer note</p>
+                                                <p class="mt-1 whitespace-pre-wrap break-words">{{ $item->notes }}</p>
+                                            </div>
                                         @endif
                                     </div>
                                 </div>

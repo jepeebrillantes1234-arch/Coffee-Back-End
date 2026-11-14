@@ -124,6 +124,10 @@ class SupportChatController extends Controller
     {
         $order = $conversation->refundOrder;
         abort_unless($order && $conversation->user_id && (int) $order->user_id === (int) $conversation->user_id, 404);
+        if ($order->payment_method === 'qrph') {
+            return redirect()->route('admin.refunds.index', ['q' => $order->order_number])
+                ->with('error', 'QRPh refunds must be reviewed and processed from Refund Management.');
+        }
         if ($order->payment_status !== 'paid') {
             return back()->with('error', 'Only a paid order can be refunded. Please review its payment status.');
         }

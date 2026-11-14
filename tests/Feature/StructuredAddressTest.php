@@ -189,6 +189,7 @@ class StructuredAddressTest extends TestCase
             'email' => "{$suffix}@example.test",
             'username' => "customer{$suffix}",
             'password' => 'password',
+            'phone' => '09' . random_int(100000000, 999999999),
             'role' => 'customer',
             'status' => 'active',
         ]);

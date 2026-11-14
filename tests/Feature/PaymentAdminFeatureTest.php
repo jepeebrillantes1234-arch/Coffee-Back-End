@@ -162,7 +162,7 @@ class PaymentAdminFeatureTest extends TestCase
     {
         return User::create([
             'name' => ucfirst($role) . ' test', 'username' => $role . Str::lower(Str::random(8)),
-            'email' => Str::lower(Str::random(12)) . '@example.test', 'password' => 'password', 'role' => $role, 'status' => 'active',
+            'email' => Str::lower(Str::random(12)) . '@example.test', 'password' => 'password', 'phone' => '09' . random_int(100000000, 999999999), 'role' => $role, 'status' => 'active',
         ]);
     }
 }

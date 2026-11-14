@@ -1,0 +1,35 @@
+%% Verified customer service chat and logout flow.
+flowchart TD
+    START([Open Customer Service]) --> AUTH{Authenticated customer?}
+    AUTH -- Yes --> LOAD[Load customer's support conversation and related context]
+    AUTH -- No --> GUEST[/Enter guest name and contact; guest token identifies conversation/]
+    GUEST --> LOAD_GUEST[Load or create guest support conversation]
+    LOAD --> MESSAGE
+    LOAD_GUEST --> MESSAGE
+    MESSAGE[/Send message, optional image or related order/]
+    MESSAGE --> SAVE[Laravel stores conversation message]
+    SAVE --> ASSIST[Existing support assistant responds using available conversation context]
+    ASSIST --> HANDOFF{Human assistance needed or requested?}
+    HANDOFF -- No --> CHAT[Continue conversation; messages remain in history]
+    HANDOFF -- Yes --> NOTIFY[Create Admin support notification / queue handoff]
+    NOTIFY --> CHOICE{Customer waits or contacts Admin directly?}
+    CHOICE -- Wait --> CHAT
+    CHOICE -- Contact Admin --> CONTACT[Show configured customer-service contact details]
+    CONTACT --> CHAT
+    CHAT --> MORE{Send another message?}
+    MORE -- Yes --> MESSAGE
+    MORE -- No --> HOME[Return to Home or Profile]
+
+    HOME --> LOGOUT{Choose Logout?}
+    LOGOUT -- No --> END_HOME([Continue app session])
+    LOGOUT -- Yes --> CONFIRM{Confirm logout?}
+    CONFIRM -- No --> HOME
+    CONFIRM -- Yes --> CLEAR[Call Laravel logout and clear local session]
+    CLEAR --> END([End at Get Started])
+
+    classDef customer fill:#f5eadb,stroke:#765039,color:#2d211b,stroke-width:2px;
+    classDef backend fill:#e6eeeb,stroke:#2d676a,color:#1e3432,stroke-width:2px;
+    classDef decision fill:#fff3d9,stroke:#b58a55,color:#30291f,stroke-width:2px;
+    class START,END,END_HOME customer;
+    class AUTH,HANDOFF,CHOICE,MORE,LOGOUT,CONFIRM decision;
+    class LOAD,LOAD_GUEST,SAVE,ASSIST,NOTIFY,CLEAR backend;

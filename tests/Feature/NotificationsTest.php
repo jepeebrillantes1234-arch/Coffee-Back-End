@@ -312,6 +312,43 @@ class NotificationsTest extends TestCase
         ]);
     }
 
+    public function test_repeated_delivery_proof_submission_returns_success_without_duplicate_completion(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('delivery-proofs/already-saved.jpg', 'existing proof');
+        $customer = $this->user('customer');
+        $rider = $this->rider(online: true);
+        $order = $this->order($customer, 'delivered');
+        $order->update(['payment_status' => 'paid']);
+        $delivery = Delivery::create([
+            'order_id' => $order->id,
+            'rider_id' => $rider->id,
+            'status' => 'delivered',
+            'delivered_at' => now(),
+            'proof_photo' => 'delivery-proofs/already-saved.jpg',
+            'cash_collected_amount' => 130,
+            'cash_collected_at' => now(),
+        ]);
+        $payload = [
+            'proof_photo' => UploadedFile::fake()->create('retry-proof.jpg', 100, 'image/jpeg'),
+            'cash_collected' => '130.00',
+        ];
+
+        $this->actingAs($rider, 'sanctum')
+            ->post("/api/v1/rider/deliveries/{$delivery->id}/delivered", $payload, ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Delivery proof was already recorded.');
+
+        $this->assertSame('delivered', $delivery->fresh()->status);
+        $this->assertSame('delivery-proofs/already-saved.jpg', $delivery->fresh()->proof_photo);
+        $this->assertSame(130.0, (float) $delivery->fresh()->cash_collected_amount);
+        $this->assertSame('delivered', $order->fresh()->status);
+        $this->assertSame('paid', $order->fresh()->payment_status);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('activity_logs', 0);
+        $this->assertDatabaseCount('app_notifications', 0);
+    }
+
     public function test_rider_chat_message_notifies_only_the_order_customer_with_safe_payload(): void
     {
         $customer = $this->user('customer');

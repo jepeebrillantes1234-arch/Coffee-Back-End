@@ -7,5 +7,5 @@ return [
     'webhook_secret' => env('PAYMONGO_WEBHOOK_SECRET'),
     'base_url' => 'https://api.paymongo.com',
     'public_url' => env('PUBLIC_URL', env('APP_URL')),
-    'timeout_minutes' => (int) env('PAYMENT_TIMEOUT_MINUTES', 15),
+    'timeout_minutes' => (int) (env('PAYMENT_TIMEOUT_MINUTES') ?: 30),
 ];

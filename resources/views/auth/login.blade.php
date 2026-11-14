@@ -91,6 +91,9 @@
                     @if ($errors->any())
                         <div class="form-error" role="alert">{{ $errors->first() }}</div>
                     @endif
+                    @if (session('status'))
+                        <div class="form-error" role="status">{{ session('status') }}</div>
+                    @endif
 
                     <div class="field">
                         <label class="field-label" for="email">Email Address</label>

@@ -244,7 +244,7 @@ class PromoManagementTest extends TestCase
         return User::create([
             'name' => ucfirst($role) . ' Promo Test', 'email' => "$suffix@example.test",
             'username' => $role . $suffix, 'password' => 'password',
-            'role' => $role, 'status' => 'active',
+            'phone' => '09' . random_int(100000000, 999999999), 'role' => $role, 'status' => 'active',
         ]);
     }
 }

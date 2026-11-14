@@ -264,6 +264,78 @@ class OrderTrackingRoutingTest extends TestCase
         ]);
     }
 
+    public function test_assigned_rider_gps_is_delivery_scoped_and_visible_before_departure(): void
+    {
+        Cache::flush();
+        config(['services.routing.provider' => 'disabled']);
+        Http::fake();
+
+        [$customerOne, $orderOne] = $this->deliveryOrder();
+        [$customerTwo, $orderTwo] = $this->deliveryOrder();
+        $deliveryOne = $orderOne->delivery;
+        $deliveryTwo = $orderTwo->delivery;
+        $riderOne = $deliveryOne->rider;
+        $riderTwo = $deliveryTwo->rider;
+        $deliveryOne->update(['status' => 'assigned']);
+        $deliveryTwo->update(['status' => 'assigned']);
+        $orderOne->update(['status' => 'rider_assigned']);
+        $orderTwo->update(['status' => 'rider_assigned']);
+
+        $this->actingAs($riderOne, 'sanctum')
+            ->postJson('/api/v1/rider/location', [
+                'delivery_id' => $deliveryOne->id,
+                'latitude' => 15.951,
+                'longitude' => 120.531,
+                'speed' => 0,
+            ])->assertOk();
+        $this->actingAs($riderTwo, 'sanctum')
+            ->postJson('/api/v1/rider/location', [
+                'delivery_id' => $deliveryTwo->id,
+                'latitude' => 15.952,
+                'longitude' => 120.532,
+                'speed' => 0,
+            ])->assertOk();
+
+        $this->actingAs($customerOne, 'sanctum')
+            ->getJson("/api/v1/orders/{$orderOne->id}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.delivery_status', 'assigned')
+            ->assertJsonPath('data.rider.lat', 15.951)
+            ->assertJsonPath('data.rider.lng', 120.531);
+        $this->actingAs($customerTwo, 'sanctum')
+            ->getJson("/api/v1/orders/{$orderTwo->id}/tracking")
+            ->assertOk()
+            ->assertJsonPath('data.delivery_status', 'assigned')
+            ->assertJsonPath('data.rider.lat', 15.952)
+            ->assertJsonPath('data.rider.lng', 120.532);
+
+        $this->actingAs($riderOne, 'sanctum')
+            ->postJson('/api/v1/rider/location', [
+                'delivery_id' => $deliveryTwo->id,
+                'latitude' => 15.953,
+                'longitude' => 120.533,
+            ])->assertNotFound();
+        $this->assertDatabaseMissing('rider_locations', [
+            'delivery_id' => $deliveryTwo->id,
+            'rider_id' => $riderOne->id,
+            'latitude' => 15.953,
+            'longitude' => 120.533,
+        ]);
+
+        $deliveryTwo->update(['status' => 'delivered']);
+        $this->actingAs($riderTwo, 'sanctum')
+            ->postJson('/api/v1/rider/location', [
+                'delivery_id' => $deliveryTwo->id,
+                'latitude' => 15.954,
+                'longitude' => 120.534,
+            ])->assertNotFound();
+        $this->assertDatabaseMissing('rider_locations', [
+            'delivery_id' => $deliveryTwo->id,
+            'rider_id' => $riderTwo->id,
+            'latitude' => 15.954,
+            'longitude' => 120.534,
+        ]);
+    }
     public function test_final_orders_return_no_live_rider_or_osrm_route(): void
     {
         Cache::flush();

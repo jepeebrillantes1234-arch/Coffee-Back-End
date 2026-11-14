@@ -84,7 +84,7 @@ class ShopOperatingHoursTest extends TestCase
         Settings::set('shop_opening_time', '06:00');
         Settings::set('shop_closing_time', '20:00');
         CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-11-02 09:00', 'Asia/Manila'));
-        $customer = User::create(['name' => 'Customer', 'email' => 'open@example.test', 'password' => 'password', 'role' => 'customer', 'status' => 'active']);
+        $customer = User::create(['name' => 'Customer', 'email' => 'open@example.test', 'password' => 'password', 'phone' => '09171110000', 'role' => 'customer', 'status' => 'active']);
         $this->actingAs($customer, 'sanctum');
         $category = Category::create(['name' => 'Coffee']);
         $product = Product::create(['category_id' => $category->id, 'name' => 'Latte', 'base_price' => 100, 'is_available' => true]);

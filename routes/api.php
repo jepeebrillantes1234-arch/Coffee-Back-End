@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\PaymongoWebhookController;
 use App\Http\Controllers\Api\RiderController;
 use App\Http\Controllers\Api\RiderChatController;
 use App\Http\Controllers\Api\ReverseGeocodeController;
+use App\Http\Controllers\Api\RefundRequestController;
 use App\Http\Controllers\Api\SupportContactController;
 use App\Http\Controllers\Api\SupportChatController;
 use Illuminate\Support\Facades\Route;
@@ -67,6 +68,10 @@ Route::prefix('v1')->group(function () {
 
         // ===== CUSTOMER =====
         Route::middleware('role:customer')->group(function () {
+            Route::get('refund-requests', [RefundRequestController::class, 'index'])->name('api.refunds.index');
+            Route::get('orders/{orderId}/refund-requests', [RefundRequestController::class, 'forOrder'])->whereNumber('orderId')->name('api.refunds.order');
+            Route::post('orders/{orderId}/refund-requests', [RefundRequestController::class, 'store'])->whereNumber('orderId')->middleware('throttle:5,1')->name('api.refunds.store');
+            Route::get('refund-requests/{refundRequest}/attachments/{index}', [RefundRequestController::class, 'attachment'])->whereNumber('refundRequest')->whereNumber('index')->name('api.refunds.attachment');
             Route::get('app-config',        [HomeController::class, 'config']);
             Route::get('loyalty', [LoyaltyController::class, 'summary']);
             Route::get('membership/card-deliveries', [MembershipCardDeliveryController::class, 'customerIndex']);

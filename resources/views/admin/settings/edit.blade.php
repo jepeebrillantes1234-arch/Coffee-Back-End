@@ -94,6 +94,16 @@
     @endif
     <button class="bg-espresso text-cream px-6 py-2.5 rounded-lg font-medium">Save Settings</button>
 </form>
+<section class="bg-white rounded-2xl shadow-sm p-6 space-y-4 max-w-2xl mt-6">
+    <div>
+        <h2 class="font-semibold">Web Session Security</h2>
+        <p class="text-sm text-espresso/60">Sign out all browser sessions for Admin and Staff accounts. This includes the current session. Flutter API and Sanctum tokens are separate and are not revoked by this action.</p>
+    </div>
+    <form method="POST" action="{{ route('admin.sessions.invalidate-all') }}" onsubmit="return confirm('Sign out every active Admin and Staff browser session, including your current session? You will need to log in again.');">
+        @csrf
+        <button type="submit" class="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Log Out All Web Sessions</button>
+    </form>
+</section>
 <script>
     for (const side of ['front', 'back']) {
         const input = document.querySelector(`input[name="membership_card_${side}_image"]`);

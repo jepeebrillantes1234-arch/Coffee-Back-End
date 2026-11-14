@@ -206,7 +206,21 @@ class PaymentGateway
 
         DB::transaction(function () use ($order, $paymentId, $amountCentavos, &$late, &$moved, &$accepted) {
             $o = Order::whereKey($order->id)->lockForUpdate()->first();
-            if (!$o || in_array($o->payment_status, ['paid', 'refunded'], true)) return;
+            if (!$o) return;
+            if (in_array($o->payment_status, ['paid', 'refunded', 'partially_refunded'], true)) {
+                // A webhook retry for a cancelled order must retry/reconcile its existing refund,
+                // while the order itself remains terminal and never re-enters the active queue.
+                $existingPayment = Payment::where('order_id', $o->id)->where('provider', 'paymongo')->first();
+                if (in_array($o->status, ['cancelled', 'rejected', 'expired'], true)
+                    && $o->payment_status === 'paid'
+                    && $existingPayment
+                    && $paymentId
+                    && $existingPayment->provider_payment_id
+                    && hash_equals((string) $existingPayment->provider_payment_id, (string) $paymentId)) {
+                    $late = true;
+                }
+                return;
+            }
 
             if ($amountCentavos !== null && $amountCentavos !== (int) round($o->total * 100)) {
                 Log::error('PayMongo amount mismatch', ['order' => $o->order_number, 'paid' => $amountCentavos, 'expected' => $o->total]);
@@ -234,7 +248,7 @@ class PaymentGateway
 
         $fresh = $order->fresh();
         if ($late) {
-            try { $this->refundOrder($fresh); } catch (\Throwable $e) { report($e); }
+            try { app(\App\Services\RefundService::class)->refundLatePayment($fresh); } catch (\Throwable $e) { report($e); }
         } elseif ($accepted) {
             Notifier::paymentConfirmed($fresh);
         }
@@ -252,16 +266,11 @@ class PaymentGateway
             $this->finishRefund($order, $p);
             return;
         }
-
-        $res = $this->http()->post('/refunds', ['data' => ['attributes' => [
-            'amount'     => (int) round($p->amount * 100),
-            'payment_id' => $p->provider_payment_id,
-            'reason'     => 'requested_by_customer',
-            'notes'      => "Refund {$order->order_number}",
-        ]]]);
-        if (!$res->successful()) $this->fail($res, 'refund');
-
-        $this->finishRefund($order, $p);
+        if (in_array($order->status, ['cancelled', 'rejected', 'expired'], true)) {
+            app(\App\Services\RefundService::class)->refundLatePayment($order);
+            return;
+        }
+        throw new \RuntimeException('Customer refunds must be reviewed and processed through Refund Management.');
     }
 
     private function finishRefund(Order $order, Payment $p): void
@@ -297,31 +306,124 @@ class PaymentGateway
         $this->markPaid($order, 'sim_pay_' . Str::random(12), (int) round($order->total * 100));
     }
 
-    /** I-cancel ang mga order na hindi nabayaran sa takdang oras. */
+    /** Expire and hide unpaid QRPh orders after the configured payment window. */
     public function expireStale(): int
     {
-        $cut = now()->subMinutes(config('paymongo.timeout_minutes'));
+        $timeoutMinutes = (int) config('paymongo.timeout_minutes', 30);
+        $cut = now()->subMinutes($timeoutMinutes);
+        $deadlineCheckAt = now();
         $count = 0;
+        $orders = Order::query()
+            ->where('status', 'awaiting_payment')
+            ->where('payment_status', 'unpaid')
+            ->where('payment_method', 'qrph')
+            ->where(function ($query) use ($cut, $deadlineCheckAt) {
+                $query->where('created_at', '<', $cut)
+                    ->orWhereHas('payments', fn ($payments) => $payments
+                        ->whereNotNull('qr_expires_at')
+                        ->where('qr_expires_at', '<=', $deadlineCheckAt));
+            })
+            ->orderBy('id')
+            ->limit(50)
+            ->get();
 
-        foreach (Order::where('status', 'awaiting_payment')->where('created_at', '<', $cut)->limit(50)->get() as $o) {
+        foreach ($orders as $order) {
+            $payment = Payment::where('order_id', $order->id)->first();
+            // A refreshed QR carries its own authoritative deadline. An older
+            // order creation time must not expire that still-valid QR early.
+            if ($payment?->qr_expires_at && $payment->qr_expires_at->isFuture()) continue;
             try {
-                if ($this->sync($o)) continue;      // bayad pala, hindi lang dumating ang webhook
+                if ($payment?->provider_intent_id) {
+                    if (!$this->providerConfirmsUnpaid($payment)) continue;
+                } else {
+                    // Keep legacy Checkout Session reconciliation; a confirmed paid
+                    // session is recorded before expiration is considered.
+                    if ($this->sync($order)) continue;
+                    $payment = Payment::where('order_id', $order->id)->first();
+                    if (!$this->providerConfirmsUnpaid($payment)) continue;
+                }
             } catch (\Throwable $e) {
+                // A provider/network error is not proof that the customer did not pay.
                 report($e);
+                continue;
             }
-            $o->refresh();
-            if ($o->status !== 'awaiting_payment') continue;
 
-            $o->update(['status' => 'cancelled', 'reject_reason' => 'Hindi nabayaran sa takdang oras']);
-            DB::table('order_status_logs')->insert([
-                'order_id' => $o->id, 'status' => 'cancelled', 'changed_by' => null, 'created_at' => now(),
-            ]);
-            PromoUsage::where('order_id', $o->id)->delete();
-            Payment::where('order_id', $o->id)->where('status', 'pending')->update(['status' => 'expired']);
-            Notifier::order($o, 'expired');
+            $expired = DB::transaction(function () use ($order, $cut, $timeoutMinutes): bool {
+                $locked = Order::query()->lockForUpdate()->find($order->id);
+                if (!$locked
+                    || $locked->status !== 'awaiting_payment'
+                    || $locked->payment_status !== 'unpaid'
+                    || $locked->payment_method !== 'qrph'
+                    || !$locked->created_at) {
+                    return false;
+                }
+
+                $payments = Payment::where('order_id', $locked->id)->lockForUpdate()->get();
+                if ($payments->contains(fn (Payment $payment) => $payment->status === 'paid')) return false;
+                $latestPayment = $payments->sortByDesc('id')->first();
+                $deadline = $latestPayment?->qr_expires_at;
+                if ($deadline ? $deadline->isFuture() : $locked->created_at->greaterThanOrEqualTo($cut)) return false;
+
+                $locked->forceFill([
+                    'status' => 'cancelled',
+                    'reject_reason' => "Payment was not confirmed within {$timeoutMinutes} minutes.",
+                    'customer_archived_at' => now(),
+                ])->save();
+                DB::table('order_status_logs')->insert([
+                    'order_id' => $locked->id, 'status' => 'cancelled', 'changed_by' => null, 'created_at' => now(),
+                ]);
+                PromoUsage::where('order_id', $locked->id)->delete();
+                Payment::where('order_id', $locked->id)->where('status', 'pending')->update(['status' => 'expired']);
+                return true;
+            });
+
+            if (!$expired) continue;
+            Notifier::order($order->fresh(), 'expired');
             $count++;
         }
+
         return $count;
+    }
+
+    /** Return true only when the provider response confirms there is no paid payment. */
+    private function providerConfirmsUnpaid(?Payment $payment): bool
+    {
+        if (!$payment || $payment->provider === 'simulated') return true;
+
+        if ($payment->provider_intent_id) {
+            $response = $this->http()->get('/payment_intents/' . $payment->provider_intent_id);
+            if (!$response->successful()
+                || data_get($response->json(), 'data.id') !== $payment->provider_intent_id) {
+                return false;
+            }
+
+            $attributes = data_get($response->json(), 'data.attributes', []);
+            $status = strtolower((string) data_get($attributes, 'status'));
+            $paid = collect((array) data_get($attributes, 'payments', []))
+                ->contains(fn ($item) => strtolower((string) data_get($item, 'attributes.status')) === 'paid');
+
+            return !$paid && in_array($status, [
+                'awaiting_payment_method', 'awaiting_next_action', 'processing',
+                'requires_payment_method', 'cancelled', 'canceled', 'expired',
+            ], true);
+        }
+
+        if ($payment->provider_session_id) {
+            $response = $this->http('v1')->get('/checkout_sessions/' . $payment->provider_session_id);
+            if (!$response->successful()
+                || data_get($response->json(), 'data.id') !== $payment->provider_session_id) {
+                return false;
+            }
+
+            $attributes = data_get($response->json(), 'data.attributes', []);
+            $status = strtolower((string) data_get($attributes, 'status'));
+            $paid = collect((array) data_get($attributes, 'payments', []))
+                ->contains(fn ($item) => strtolower((string) data_get($item, 'attributes.status')) === 'paid');
+
+            return !$paid && in_array($status, ['active', 'expired'], true);
+        }
+
+        return true;
     }
 
     // ---------------- WEBHOOK ----------------
@@ -348,6 +450,16 @@ class PaymentGateway
         $type = data_get($payload, 'data.attributes.type') ?? data_get($payload, 'data.type');
         $res  = data_get($payload, 'data.attributes.data') ?? data_get($payload, 'data.data');
         if (!$res) return;
+
+        if (in_array($type, ['payment.refunded', 'payment.refund.updated'], true)) {
+            $refunds = $type === 'payment.refunded'
+                ? (array) data_get($res, 'attributes.refunds', [])
+                : [$res];
+            foreach ($refunds as $refundResource) {
+                if (is_array($refundResource)) app(\App\Services\RefundService::class)->applyWebhookResource($refundResource);
+            }
+            return;
+        }
 
         // Preserve existing pending Checkout Sessions during the migration.
         if ($type === 'checkout_session.payment.paid') {
