@@ -52,6 +52,7 @@ class ReverseGeocodeController extends Controller
             $response = Http::withUserAgent($userAgent)
                 ->acceptJson()
                 ->withHeaders(['Accept-Language' => 'en'])
+                ->connectTimeout(3)
                 ->timeout(8)
                 ->get('https://nominatim.openstreetmap.org/reverse', [
                     'lat' => $latitude,

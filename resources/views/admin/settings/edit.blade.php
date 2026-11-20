@@ -104,6 +104,19 @@
         <button type="submit" class="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Log Out All Web Sessions</button>
     </form>
 </section>
+<section class="bg-white rounded-2xl shadow-sm p-6 space-y-4 max-w-2xl mt-6 border border-red-200">
+    <div>
+        <h2 class="font-semibold text-red-800">Log Out All Users</h2>
+        <p class="text-sm text-espresso/60">Sign out all Admin and Staff browser sessions and revoke every Customer and Rider API token. This also signs out your current Admin session. Orders, payments, and other business records are not affected.</p>
+    </div>
+    @if ($errors->has('global_logout'))
+        <p role="alert" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{{ $errors->first('global_logout') }}</p>
+    @endif
+    <form method="POST" action="{{ route('admin.sessions.logout-all-users') }}" onsubmit="return confirm('Sign out all Admin and Staff browser sessions and revoke all Customer and Rider app tokens? This will also sign you out.');">
+        @csrf
+        <button type="submit" class="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800">Log Out All Users</button>
+    </form>
+</section>
 <script>
     for (const side of ['front', 'back']) {
         const input = document.querySelector(`input[name="membership_card_${side}_image"]`);

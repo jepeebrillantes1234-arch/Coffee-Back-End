@@ -23,6 +23,9 @@ return [
         'project_id' => env('FIREBASE_PROJECT_ID', 'kjm-coffee-shop'),
         'credentials' => env('FIREBASE_CREDENTIALS'),
     ],
+    'api' => [
+        'slow_request_threshold_ms' => (int) env('API_SLOW_REQUEST_THRESHOLD_MS', 2000),
+    ],
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),

@@ -15,7 +15,7 @@ class MembershipCardDeliveryRouter {
         try {
             $base=rtrim((string)config('services.routing.osrm_base_url'),' /');
             $url=$base.'/route/v1/driving/'.(float)$origin['lng'].','.(float)$origin['lat'].';'.(float)$destination['lng'].','.(float)$destination['lat'];
-            $response=Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (membership card delivery)')->timeout(5)->get($url,['overview'=>'full','geometries'=>'geojson','steps'=>'false']);
+            $response=Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (membership card delivery)')->connectTimeout(2)->timeout(5)->get($url,['overview'=>'full','geometries'=>'geojson','steps'=>'false']);
             $body=$response->json();$coords=$body['routes'][0]['geometry']['coordinates']??[];
             if(!$response->successful()||($body['code']??null)!=='Ok'||count($coords)<2)throw new \RuntimeException('OSRM returned no usable route.');
             $route=['points'=>array_map(fn($p)=>['lat'=>(float)$p[1],'lng'=>(float)$p[0]],$coords),'distance_meters'=>(int)round((float)$body['routes'][0]['distance']),'duration_seconds'=>(int)round((float)$body['routes'][0]['duration']),'origin'=>$origin,'fetched_at'=>$now];

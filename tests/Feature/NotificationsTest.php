@@ -6,6 +6,8 @@ use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\RiderProfile;
 use App\Models\User;
+use App\Events\LiveUpdate;
+use App\Jobs\SendFcmNotification;
 use App\Services\OrderWorkflow;
 use App\Services\PaymentGateway;
 use App\Services\FcmPushService;
@@ -23,6 +25,40 @@ use Tests\TestCase;
 class NotificationsTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Match the deployed queue driver so queued push jobs remain pending
+        // until explicitly processed by the test helper below.
+        config(['queue.default' => 'database']);
+    }
+
+    public function test_notification_is_persisted_before_fcm_is_queued(): void
+    {
+        $customer = $this->user('customer');
+
+        \App\Support\Notifier::send($customer->id, 'Queued notice', 'Persisted before push.', 'general');
+
+        $record = DB::table('app_notifications')->where('user_id', $customer->id)->first();
+        $this->assertNotNull($record);
+        $this->assertSame('queued', json_decode($record->data, true)['fcm_delivery_status']);
+    }
+
+    public function test_notification_and_broadcast_jobs_have_bounded_after_commit_delivery(): void
+    {
+        $pushJob = new SendFcmNotification(1, 1, 'Title', 'Message');
+        $broadcast = new LiveUpdate('notification', 1, 1);
+
+        $this->assertTrue($pushJob->afterCommit);
+        $this->assertSame(1, $pushJob->tries);
+        $this->assertSame(8, $pushJob->timeout);
+        $this->assertInstanceOf(\Illuminate\Contracts\Broadcasting\ShouldBroadcast::class, $broadcast);
+        $this->assertInstanceOf(\Illuminate\Contracts\Events\ShouldDispatchAfterCommit::class, $broadcast);
+        $this->assertSame(1, $broadcast->tries);
+        $this->assertSame(8, $broadcast->timeout);
+    }
 
     public function test_customer_and_rider_can_list_only_their_own_notifications(): void
     {
@@ -55,20 +91,25 @@ class NotificationsTest extends TestCase
         $order = $this->readyOrder($customer);
         $offline->forceFill(['fcm_token' => 'test-offline-rider-token'])->save();
         $online->forceFill(['fcm_token' => 'test-online-rider-token'])->save();
-        $messaging = Mockery::mock(Messaging::class);
-        $messaging->shouldReceive('send')->once()->with(Mockery::on(function ($message) use ($order) {
-            $payload = $message->jsonSerialize();
-
-            return ($payload['notification']['title'] ?? null) === 'New Delivery Assignment'
-                && ($payload['notification']['body'] ?? null) === 'You have a new delivery request. Tap to view the delivery.'
-                && ($payload['data']['type'] ?? null) === 'delivery_assigned'
-                && ($payload['data']['order_id'] ?? null) === (string) $order->id;
-        }))->andReturn(['name' => 'mock-delivery-message-id']);
-        $this->instance(Messaging::class, $messaging);
-
         app(OrderWorkflow::class)->assignRider($order, (int) $online->id);
 
         $delivery = Delivery::where('order_id', $order->id)->firstOrFail();
+        $notificationId = (int) DB::table('app_notifications')->where('user_id', $online->id)->where('type', 'delivery')->value('id');
+        $push = Mockery::mock(FcmPushService::class);
+        $push->shouldReceive('sendToUser')->once()->with(
+            Mockery::on(fn (User $user) => $user->is($online)),
+            'New Delivery Assignment',
+            'You have a new delivery request. Tap to view the delivery.',
+            Mockery::on(fn (array $data) => ($data['type'] ?? null) === 'delivery_assigned'
+                && ($data['order_id'] ?? null) === (string) $order->id),
+        )->andReturn('sent');
+        $this->processNotificationPush($notificationId, $online, $push, [
+            'type' => 'delivery_assigned',
+            'delivery_id' => (string) $delivery->id,
+            'order_id' => (string) $order->id,
+            'status' => 'assigned',
+            'order_status' => (string) $order->status,
+        ]);
         $this->assertDatabaseHas('app_notifications', [
             'user_id' => $online->id,
             'type' => 'delivery',
@@ -209,6 +250,9 @@ class NotificationsTest extends TestCase
 
         $records = DB::table('app_notifications')->where('user_id', $customer->id)->where('type', 'order')->get();
         $this->assertCount(1, $records);
+        $this->assertSame('queued', json_decode($records[0]->data, true)['fcm_delivery_status']);
+        $this->processNotificationPush((int) $records[0]->id, $customer);
+        $records = DB::table('app_notifications')->where('user_id', $customer->id)->where('type', 'order')->get();
         $this->assertSame('Order Confirmed!', $records[0]->title);
         $this->assertSame('Your order has been accepted by KJM Coffee. We will start preparing your order soon.', $records[0]->message);
         $data = json_decode($records[0]->data, true);
@@ -249,10 +293,13 @@ class NotificationsTest extends TestCase
 
         \App\Support\Notifier::order($order, 'confirmed');
         $record = DB::table('app_notifications')->where('user_id', $customer->id)->where('type', 'order')->first();
+        $this->processNotificationPush((int) $record->id, $customer);
+        $record = DB::table('app_notifications')->where('id', $record->id)->first();
         $this->assertSame('failed', json_decode($record->data, true)['fcm_delivery_status']);
 
         \App\Support\Notifier::order($order, 'confirmed');
         \App\Support\Notifier::order($order, 'confirmed');
+        $this->processNotificationPush((int) $record->id, $customer);
 
         $records = DB::table('app_notifications')->where('user_id', $customer->id)->where('type', 'order')->get();
         $this->assertCount(1, $records);
@@ -464,6 +511,27 @@ class NotificationsTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    private function processNotificationPush(int $notificationId, User $user, ?FcmPushService $push = null, ?array $payload = null): void
+    {
+        $record = DB::table('app_notifications')->where('id', $notificationId)->firstOrFail();
+        if ($payload === null) {
+            $payload = json_decode((string) $record->data, true) ?: [];
+            foreach (array_keys($payload) as $key) {
+                if (str_starts_with($key, 'fcm_')) {
+                    unset($payload[$key]);
+                }
+            }
+        }
+
+        (new SendFcmNotification(
+            $notificationId,
+            $user->id,
+            $record->title,
+            $record->message,
+            $payload,
+        ))->handle($push ?? app(FcmPushService::class));
     }
 
     private function rider(bool $online): User

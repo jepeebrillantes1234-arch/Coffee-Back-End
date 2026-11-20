@@ -15,5 +15,6 @@
             @yield('content')
         </main>
     </div>
+@include('components.request-loading-overlay')
 </body>
 </html>

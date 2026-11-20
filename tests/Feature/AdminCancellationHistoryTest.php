@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class AdminCancellationHistoryTest extends TestCase
@@ -26,7 +27,7 @@ class AdminCancellationHistoryTest extends TestCase
             'payment_status' => 'unpaid',
             'reject_reason' => 'Change Address',
         ]);
-        \DB::table('order_status_logs')->insert([
+        DB::table('order_status_logs')->insert([
             'order_id' => $order->id,
             'status' => 'cancelled',
             'changed_by' => $customer->id,

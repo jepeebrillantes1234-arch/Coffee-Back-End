@@ -52,6 +52,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::post('security/sessions/invalidate-all', [SessionManagementController::class, 'invalidateAllWebSessions'])->name('sessions.invalidate-all');
+    Route::post('security/logout-all-users', [SessionManagementController::class, 'logoutAllUsers'])->name('sessions.logout-all-users');
     Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::get('support', [SupportChatController::class, 'index'])->name('support.index');

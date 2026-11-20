@@ -18,7 +18,7 @@ class PaymentGateway
     {
         $key ??= config('paymongo.secret');
         if (!$key) throw new \RuntimeException('Walang PAYMONGO_SECRET_KEY sa .env.');
-        return Http::withBasicAuth($key, '')->acceptJson()->asJson()->timeout(20)->baseUrl(rtrim(config('paymongo.base_url'), '/') . '/' . $version);
+        return Http::withBasicAuth($key, '')->acceptJson()->asJson()->connectTimeout(3)->timeout(20)->baseUrl(rtrim(config('paymongo.base_url'), '/') . '/' . $version);
     }
 
     private function fail($res, string $what): never

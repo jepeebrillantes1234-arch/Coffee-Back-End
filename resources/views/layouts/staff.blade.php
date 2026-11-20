@@ -582,6 +582,7 @@
 
 </script>
 
+@include('components.request-loading-overlay')
 </body>
 
 </html>

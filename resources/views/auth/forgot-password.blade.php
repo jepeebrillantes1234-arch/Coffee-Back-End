@@ -56,5 +56,6 @@
     @endif
     <a class="back" href="{{ route('login') }}">Back to login</a>
 </main>
+@include('components.request-loading-overlay')
 </body>
 </html>

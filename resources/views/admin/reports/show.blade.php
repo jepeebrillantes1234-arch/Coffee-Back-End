@@ -1,6 +1,9 @@
 @extends('layouts.admin')
 @section('title', $title)
 @section('content')
+@if ($type === 'sales')
+    @include('admin.reports.sales')
+@else
 <div class="flex items-center justify-between mb-6 print:hidden">
     <h1 class="text-2xl font-semibold">Reports</h1>
     <div class="flex gap-2 text-sm">
@@ -34,4 +37,5 @@
         </tbody>
     </table>
 </div>
+@endif
 @endsection

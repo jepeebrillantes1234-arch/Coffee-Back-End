@@ -133,5 +133,6 @@
     <script>
         (()=>{const input=document.getElementById('password'),button=document.getElementById('togglePassword'),icon=document.getElementById('eyeIcon');button?.addEventListener('click',()=>{const showing=input.type==='password';input.type=showing?'text':'password';button.setAttribute('aria-label',showing?'Hide password':'Show password');button.setAttribute('aria-pressed',showing?'true':'false');icon.innerHTML=showing?'<path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a14.7 14.7 0 0 1-3.1 3.7M6.2 6.2C3.5 8.1 2 12 2 12s3.5 7 10 7a10.7 10.7 0 0 0 4-.8"/>':'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/>'})})();
     </script>
+    @include('components.request-loading-overlay')
 </body>
 </html>

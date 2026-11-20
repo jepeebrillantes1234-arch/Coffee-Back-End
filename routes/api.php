@@ -59,6 +59,8 @@ Route::prefix('v1')->group(function () {
 
         // ===== CUSTOMER AND RIDER SUPPORT =====
         Route::middleware('role:customer,rider')->group(function () {
+            Route::get('deliveries/{deliveryId}/chat/messages/{messageId}/attachment', [RiderChatController::class, 'conversationAttachment'])
+                ->whereNumber('deliveryId')->whereNumber('messageId')->name('api.delivery-chat.attachment');
             Route::get('support/conversation', [SupportChatController::class, 'current']);
             Route::post('support/conversations', [SupportChatController::class, 'start'])->middleware('throttle:10,1');
             Route::get('support/conversations/{conversation}', [SupportChatController::class, 'show'])->whereNumber('conversation');

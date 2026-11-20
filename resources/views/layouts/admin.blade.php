@@ -63,7 +63,7 @@
         @yield('admin-styles')
     </style>
 </head>
-<body>
+<body data-kjm-error-recovery="admin">
 @php
     $icons = [
         'grid' => '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
@@ -252,6 +252,7 @@
 })();
 </script>
 @stack('scripts')
+@include('components.request-loading-overlay')
 </body>
 </html>
 

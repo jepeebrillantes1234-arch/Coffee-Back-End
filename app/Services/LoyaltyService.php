@@ -74,7 +74,7 @@ class LoyaltyService
         if ($payment && $payment->status === 'pending' && $payment->provider === 'paymongo' && $payment->provider_session_id && !$payment->provider_intent_id) {
             $key = config('paymongo.secret');
             if ($key) {
-                $response = Http::withBasicAuth($key, '')->acceptJson()->timeout(20)
+                $response = Http::withBasicAuth($key, '')->acceptJson()->connectTimeout(3)->timeout(20)
                     ->get(rtrim(config('paymongo.base_url'), '/') . '/v1/checkout_sessions/' . $payment->provider_session_id);
                 if ($response->successful()) {
                     foreach ((array) $response->json('data.attributes.payments', []) as $providerPayment) {

@@ -37,7 +37,7 @@ class OrderTrackingRouter
         try {
             $base = rtrim((string) config('services.routing.osrm_base_url'), ' /');
             $url = $base . '/route/v1/driving/' . (float) $origin['lng'] . ',' . (float) $origin['lat'] . ';' . (float) $destination['lng'] . ',' . (float) $destination['lat'];
-            $response = Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (order tracking)')->timeout(5)->get($url, [
+            $response = Http::acceptJson()->withUserAgent('KJMCoffeeShop/1.0 (order tracking)')->connectTimeout(2)->timeout(5)->get($url, [
                 'overview' => 'full', 'geometries' => 'geojson', 'steps' => 'false',
             ]);
             $body = $response->json();

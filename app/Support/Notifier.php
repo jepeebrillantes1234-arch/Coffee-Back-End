@@ -3,11 +3,10 @@
 namespace App\Support;
 
 use App\Events\LiveUpdate;
+use App\Jobs\SendFcmNotification;
 use App\Models\Delivery;
 use App\Models\DeliveryChatMessage;
 use App\Models\Order;
-use App\Models\User;
-use App\Services\FcmPushService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -30,22 +29,13 @@ class Notifier
             'updated_at' => now(),
         ]);
 
-        try {
-            $user = User::find($userId);
-            if ($user) {
-                app(FcmPushService::class)->sendToUser(
-                    $user,
-                    $title,
-                    $message,
-                    array_merge($data, ['type' => $fcmType ?? $type ?? 'general'])
-                );
-            }
-        } catch (\Throwable $exception) {
-            Log::warning('Unable to process notification delivery.', [
-                'user_id' => $userId,
-                'exception' => $exception::class,
-            ]);
-        }
+        self::queueFcmDelivery(
+            $id,
+            $userId,
+            $title,
+            $message,
+            array_merge($data, ['type' => $fcmType ?? $type ?? 'general'])
+        );
 
         try {
             LiveUpdate::dispatch('notification', $id, $userId);
@@ -295,37 +285,13 @@ class Notifier
             }
         }
 
-        $deliveryStatus = 'no_token';
-        try {
-            $user = User::find($userId);
-            if ($user) {
-                $deliveryStatus = app(FcmPushService::class)->sendToUser(
-                    $user,
-                    $title,
-                    $message,
-                    array_merge($data, ['type' => 'order'])
-                );
-            }
-        } catch (\Throwable $exception) {
-            // Keep diagnostics sanitized; the FCM service also logs only user ID
-            // and exception class for provider failures.
-            Log::warning('Unable to process order notification delivery.', [
-                'user_id' => $userId,
-                'exception' => $exception::class,
-            ]);
-            $deliveryStatus = 'failed';
-        }
-
-        $notificationData['fcm_delivery_status'] = $deliveryStatus;
-        $notificationData['fcm_last_attempt_at'] = now()->toIso8601String();
-        if ($deliveryStatus === 'sent') {
-            $notificationData['fcm_sent_at'] = now()->toIso8601String();
-        }
-
-        DB::table('app_notifications')->where('id', $notificationId)->update([
-            'data' => json_encode($notificationData),
-            'updated_at' => now(),
-        ]);
+        self::queueFcmDelivery(
+            (int) $notificationId,
+            $userId,
+            $title,
+            $message,
+            array_merge($data, ['type' => 'order'])
+        );
 
         if ($isNew) {
             try {
@@ -336,6 +302,45 @@ class Notifier
                     'exception' => $exception::class,
                 ]);
             }
+        }
+    }
+
+    private static function queueFcmDelivery(int $notificationId, int $userId, string $title, string $message, array $data): void
+    {
+        $notification = DB::table('app_notifications')->where('id', $notificationId)->first();
+        if (!$notification) {
+            return;
+        }
+
+        $notificationData = json_decode((string) $notification->data, true);
+        $notificationData = is_array($notificationData) ? $notificationData : [];
+        $notificationData['fcm_delivery_status'] = 'queued';
+        $notificationData['fcm_last_attempt_at'] = now()->toIso8601String();
+        DB::table('app_notifications')->where('id', $notificationId)->update([
+            'data' => json_encode($notificationData),
+            'updated_at' => now(),
+        ]);
+
+        try {
+            SendFcmNotification::dispatch($notificationId, $userId, $title, $message, $data)->afterCommit();
+        } catch (\Throwable $exception) {
+            // The in-app notification record remains available through polling.
+            $notificationData['fcm_delivery_status'] = 'failed';
+            try {
+                DB::table('app_notifications')->where('id', $notificationId)->update([
+                    'data' => json_encode($notificationData),
+                    'updated_at' => now(),
+                ]);
+            } catch (\Throwable $statusException) {
+                Log::warning('Could not update queued notification delivery status.', [
+                    'notification_id' => $notificationId,
+                    'exception_type' => $statusException::class,
+                ]);
+            }
+            Log::warning('Unable to queue Firebase notification; persisted notification remains available.', [
+                'notification_id' => $notificationId,
+                'exception_type' => $exception::class,
+            ]);
         }
     }
 }

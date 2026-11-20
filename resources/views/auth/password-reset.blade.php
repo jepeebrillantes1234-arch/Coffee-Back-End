@@ -26,5 +26,7 @@
         <input id="password_confirmation" name="password_confirmation" type="password" required minlength="8" autocomplete="new-password">
         <button type="submit">Save new password</button>
     </form>
-</main></body>
+</main>
+@include('components.request-loading-overlay')
+</body>
 </html>
