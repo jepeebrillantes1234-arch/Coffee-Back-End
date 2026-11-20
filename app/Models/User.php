@@ -11,7 +11,11 @@ class User extends Authenticatable
 
     protected $fillable = ['name','username','email','phone','bio','preferred_language','password','role','avatar','status','fcm_token','google_id','firebase_uid'];
     protected $hidden   = ['password','remember_token'];
-    protected $casts    = ['password' => 'hashed'];
+    protected $casts    = [
+        'password' => 'hashed',
+        'login_locked_until' => 'datetime',
+        'password_reset_required' => 'boolean',
+    ];
 
     public function riderProfile() { return $this->hasOne(RiderProfile::class); }
     public function orders()       { return $this->hasMany(Order::class); }

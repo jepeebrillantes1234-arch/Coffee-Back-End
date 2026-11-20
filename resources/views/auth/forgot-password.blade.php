@@ -26,6 +26,7 @@
         <p>Reset your password</p>
     </header>
     @if (session('status')) <div class="alert" role="status">{{ session('status') }}</div> @endif
+    @if (session('password_reset_required')) <div class="error" role="alert">{{ session('password_reset_required') }}</div> @endif
     @if ($errors->any()) <div class="error" role="alert">{{ $errors->first() }}</div> @endif
 
     @if ($email)
@@ -50,7 +51,7 @@
         <form method="POST" action="{{ route('password.request.code') }}">
             @csrf
             <label for="email">Email address</label>
-            <input id="email" type="email" name="email" value="{{ old('email') }}" autocomplete="email" required autofocus>
+            <input id="email" type="email" name="email" value="{{ old('email', $forcedResetEmail) }}" autocomplete="email" required autofocus>
             <button type="submit">Send verification code</button>
         </form>
     @endif

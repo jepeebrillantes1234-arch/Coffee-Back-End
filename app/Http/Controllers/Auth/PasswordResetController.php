@@ -7,23 +7,27 @@ use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use App\Services\AccountLoginSecurity;
 use Throwable;
 
 class PasswordResetController extends Controller
 {
-    private const CODE_TTL_MINUTES = 10;
+    private const CODE_TTL_MINUTES = 5;
     private const MAX_CODE_ATTEMPTS = 5;
 
     public function requestForm()
     {
         return view('auth.forgot-password', [
             'email' => session('password_reset_email', ''),
+            'forcedResetEmail' => session('password_reset_forced_email', ''),
         ]);
     }
 
@@ -49,11 +53,12 @@ class PasswordResetController extends Controller
             Cache::put($cacheKey, [
                 'hash' => Hash::make($code),
                 'attempts' => 0,
+                'expires_at' => now()->addMinutes(self::CODE_TTL_MINUTES)->timestamp,
             ], now()->addMinutes(self::CODE_TTL_MINUTES));
 
             try {
                 Mail::raw(
-                    "Your KJM Coffee Shop password reset code is: {$code}\n\nThis code expires in 10 minutes. If you did not request a password reset, ignore this email.",
+                    "Your KJM Coffee Shop password reset code is: {$code}\n\nThis code expires in 5 minutes. If you did not request a password reset, ignore this email.",
                     function ($message) use ($email) {
                         $message->to($email)->subject('KJM Coffee Shop password reset code');
                     },
@@ -95,40 +100,50 @@ class PasswordResetController extends Controller
 
         $email = strtolower(trim($data['email']));
         $cacheKey = $this->codeCacheKey($email);
-        $entry = Cache::get($cacheKey);
-
-        if (!is_array($entry) || !isset($entry['hash'])) {
-            return back()->withErrors(['code' => 'Wala, mali, o expired na ang code. Humingi ng bagong code.']);
+        $verificationLock = Cache::lock($cacheKey . ':verification-lock', 30);
+        if (!$verificationLock->get()) {
+            return back()->withErrors(['code' => 'Verification is already being processed. Please try again shortly.']);
         }
 
-        if (($entry['attempts'] ?? 0) >= self::MAX_CODE_ATTEMPTS) {
+        try {
+            $entry = Cache::get($cacheKey);
+
+            if (!is_array($entry) || !isset($entry['hash']) || (int) ($entry['expires_at'] ?? 0) <= now()->timestamp) {
+                Cache::forget($cacheKey);
+                return back()->withErrors(['code' => 'Wala, mali, o expired na ang code. Humingi ng bagong code.']);
+            }
+
+            if (($entry['attempts'] ?? 0) >= self::MAX_CODE_ATTEMPTS) {
+                Cache::forget($cacheKey);
+                return back()->withErrors(['code' => 'Naubos na ang attempts. Humingi ng bagong verification code.']);
+            }
+
+            if (!Hash::check($data['code'], $entry['hash'])) {
+                $entry['attempts'] = ($entry['attempts'] ?? 0) + 1;
+                $ttlSeconds = max(1, (int) $entry['expires_at'] - now()->timestamp);
+                Cache::put($cacheKey, $entry, now()->addSeconds($ttlSeconds));
+                return back()->withErrors(['code' => 'Mali ang verification code. Suriin ang email at subukan muli.']);
+            }
+
+            $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
+            if (!$user) {
+                Cache::forget($cacheKey);
+                return back()->withErrors(['code' => 'Hindi ma-verify ang request. Humingi ng bagong code.']);
+            }
+
+            // Consume before writing account state so concurrent submissions cannot reuse the code.
             Cache::forget($cacheKey);
-            return back()->withErrors(['code' => 'Naubos na ang attempts. Humingi ng bagong verification code.']);
+            DB::transaction(function () use ($user, $data): void {
+                app(AccountLoginSecurity::class)->clearAfterPasswordReset($user, $data['password']);
+                event(new PasswordReset($user->fresh()));
+            }, 3);
+            $this->logoutCurrentWebSessionIfResetUser($request, $user->getKey());
+            $request->session()->forget('password_reset_email');
+
+            return redirect()->route('password.reset.done');
+        } finally {
+            $verificationLock->release();
         }
-
-        if (!Hash::check($data['code'], $entry['hash'])) {
-            $entry['attempts'] = ($entry['attempts'] ?? 0) + 1;
-            Cache::put($cacheKey, $entry, now()->addMinutes(self::CODE_TTL_MINUTES));
-            return back()->withErrors(['code' => 'Mali ang verification code. Suriin ang email at subukan muli.']);
-        }
-
-        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
-        if (!$user) {
-            Cache::forget($cacheKey);
-            return back()->withErrors(['code' => 'Hindi ma-verify ang request. Humingi ng bagong code.']);
-        }
-
-        $user->forceFill([
-            'password' => $data['password'],
-            'remember_token' => Str::random(60),
-        ])->save();
-        $user->tokens()->delete();
-        event(new PasswordReset($user));
-
-        Cache::forget($cacheKey);
-        $request->session()->forget('password_reset_email');
-
-        return redirect()->route('password.reset.done');
     }
 
     private function codeCacheKey(string $email): string
@@ -150,20 +165,32 @@ class PasswordResetController extends Controller
             'password' => 'required|string|min:8|confirmed',
         ]);
 
-        $status = Password::reset($data, function ($user, $password) {
-            $user->forceFill([
-                'password' => $password,
-                'remember_token' => Str::random(60),
-            ])->save();
-            $user->tokens()->delete();
-            event(new PasswordReset($user));
-        });
+        $resetUserId = null;
+        $status = DB::transaction(function () use ($data, &$resetUserId) {
+            return Password::reset($data, function ($user, $password) use (&$resetUserId) {
+                app(AccountLoginSecurity::class)->clearAfterPasswordReset($user, $password);
+                $resetUserId = $user->getKey();
+                event(new PasswordReset($user->fresh()));
+            });
+        }, 3);
 
         if ($status === Password::PASSWORD_RESET) {
+            $this->logoutCurrentWebSessionIfResetUser($request, $resetUserId);
             return redirect()->route('password.reset.done');
         }
 
         return back()->withErrors(['email' => __($status)])->withInput($request->only('email'));
+    }
+
+    private function logoutCurrentWebSessionIfResetUser(Request $request, int|string|null $userId): void
+    {
+        if ($userId === null || (string) Auth::guard('web')->id() !== (string) $userId) {
+            return;
+        }
+
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
     }
 
     public function done()

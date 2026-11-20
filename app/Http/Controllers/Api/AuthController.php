@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use App\Services\AccountLoginSecurity;
 
 class AuthController extends Controller
 {
@@ -19,9 +20,27 @@ class AuthController extends Controller
         return response()->json(['success' => true, 'message' => $msg, 'data' => $data, 'errors' => null], $code);
     }
 
-    private function fail(string $msg, int $code = 422, $errors = null)
+    private function fail(string $msg, int $code = 422, $errors = null, $data = null)
     {
-        return response()->json(['success' => false, 'message' => $msg, 'data' => null, 'errors' => $errors], $code);
+        return response()->json(['success' => false, 'message' => $msg, 'data' => $data, 'errors' => $errors], $code);
+    }
+
+    private function loginRestriction(User $user, array $state)
+    {
+        $requiresReset = $state['status'] === 'password_reset_required';
+        $seconds = max(0, (int) ($state['retry_after_seconds'] ?? 0));
+        $message = $requiresReset
+            ? 'A password reset is required before you can sign in.'
+            : 'Too many failed login attempts. Please wait 5 minutes before trying again.';
+        $metadata = ['security' => [
+            'status' => $requiresReset ? 'password_reset_required' : 'locked',
+            'retry_after_seconds' => $seconds,
+            'locked_until' => $user->login_locked_until?->toIso8601String(),
+            'password_reset_required' => $requiresReset,
+        ]];
+
+        return $this->fail($message, 429, null, $metadata)
+            ->header('Retry-After', (string) $seconds);
     }
 
     // POST /api/v1/auth/register  (customer lang)
@@ -56,7 +75,16 @@ class AuthController extends Controller
             ->orWhere('phone', $identifier)
             ->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!$user) {
+            return $this->fail('Invalid username or password.', 401);
+        }
+        $security = app(AccountLoginSecurity::class);
+        $attempt = $security->attemptPassword($user, $request->password);
+        if (in_array($attempt['status'], ['locked', 'password_reset_required'], true)) {
+            $user->refresh();
+            return $this->loginRestriction($user, $attempt);
+        }
+        if ($attempt['status'] !== 'success') {
             return $this->fail('Invalid username or password.', 401);
         }
         if ($user->status !== 'active') {
@@ -66,7 +94,15 @@ class AuthController extends Controller
             return $this->fail('Hindi pa naaprubahan ang rider account.', 403);
         }
 
-        $token = $user->createToken($request->input('device_name', 'mobile'))->plainTextToken;
+        $tokenResult = $security->issuePasswordToken(
+            $user,
+            $request->input('device_name', 'mobile'),
+        );
+        if (in_array($tokenResult['status'], ['locked', 'password_reset_required'], true)) {
+            $user->refresh();
+            return $this->loginRestriction($user, $tokenResult);
+        }
+        $token = $tokenResult['token'];
 
         return $this->ok(['user' => $this->userPayload($user), 'token' => $token], 'Logged in');
     }
@@ -168,7 +204,16 @@ class AuthController extends Controller
             return $this->fail('The rider account has not been approved yet.', 403);
         }
 
-        $token = $user->createToken($request->input('device_name', 'kjm-firebase-app'))->plainTextToken;
+        $securityState = app(AccountLoginSecurity::class)->issueGoogleToken(
+            $user,
+            $request->input('device_name', 'kjm-firebase-app'),
+        );
+        if (in_array($securityState['status'], ['locked', 'password_reset_required'], true)) {
+            $user->refresh();
+            return $this->loginRestriction($user, $securityState);
+        }
+
+        $token = $securityState['token'];
         return $this->ok(['user' => $this->userPayload($user), 'token' => $token], 'Logged in with Firebase');
     }
     // POST /api/v1/auth/forgot-password

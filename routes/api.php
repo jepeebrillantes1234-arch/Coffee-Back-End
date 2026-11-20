@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\ReverseGeocodeController;
 use App\Http\Controllers\Api\RefundRequestController;
 use App\Http\Controllers\Api\SupportContactController;
 use App\Http\Controllers\Api\SupportChatController;
+use App\Http\Middleware\EnforcePasswordResetRequired;
 use Illuminate\Support\Facades\Route;
 
 // Base URL: /api/v1
@@ -45,7 +46,7 @@ Route::prefix('v1')->group(function () {
     Route::post('webhooks/paymongo', PaymongoWebhookController::class);
 
     // Naka-login
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', EnforcePasswordResetRequired::class])->group(function () {
         Route::post('/broadcasting/auth', \Illuminate\Broadcasting\BroadcastController::class.'@authenticate');
         Route::post('notifications/device-token', [DeviceTokenController::class, 'store']);
         Route::delete('notifications/device-token', [DeviceTokenController::class, 'destroy']);

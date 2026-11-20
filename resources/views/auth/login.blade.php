@@ -88,6 +88,16 @@
                         <p class="form-subtitle">Sign in to your account</p>
                     </header>
 
+                    @php($lockoutUntil = session('lockout_until') ? \Carbon\Carbon::parse(session('lockout_until')) : null)
+                    @if (session('password_reset_required'))
+                        <div class="form-error" role="alert">{{ session('password_reset_required') }} <a href="{{ route('password.request') }}">Reset password</a></div>
+                    @endif
+                    @if (session('lockout_until') && $lockoutUntil?->isFuture())
+                        <div class="form-error" id="login-lockout-notice" role="alert" data-lockout-until="{{ $lockoutUntil->toIso8601String() }}">
+                            Too many failed login attempts. Please wait 5 minutes before trying again.
+                            <div>Try again in <strong id="login-lockout-countdown">5:00</strong>.</div>
+                        </div>
+                    @endif
                     @if ($errors->any())
                         <div class="form-error" role="alert">{{ $errors->first() }}</div>
                     @endif
@@ -121,7 +131,7 @@
                         <a class="forgot-link" href="{{ route('password.request') }}">Forgot password?</a>
                     </div>
 
-                    <button type="submit" class="login-button">
+                    <button id="login-submit" type="submit" class="login-button" @disabled(session('lockout_until') && $lockoutUntil?->isFuture())>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3h-6"/></svg>
                         <span>Sign In</span>
                     </button>
@@ -132,6 +142,7 @@
 
     <script>
         (()=>{const input=document.getElementById('password'),button=document.getElementById('togglePassword'),icon=document.getElementById('eyeIcon');button?.addEventListener('click',()=>{const showing=input.type==='password';input.type=showing?'text':'password';button.setAttribute('aria-label',showing?'Hide password':'Show password');button.setAttribute('aria-pressed',showing?'true':'false');icon.innerHTML=showing?'<path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 5.2A10.8 10.8 0 0 1 12 5c6.5 0 10 7 10 7a14.7 14.7 0 0 1-3.1 3.7M6.2 6.2C3.5 8.1 2 12 2 12s3.5 7 10 7a10.7 10.7 0 0 0 4-.8"/>':'<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/>'})})();
+        (()=>{const notice=document.getElementById('login-lockout-notice');if(!notice)return;const until=Date.parse(notice.dataset.lockoutUntil),label=document.getElementById('login-lockout-countdown'),submit=document.getElementById('login-submit');const update=()=>{const seconds=Math.max(0,Math.ceil((until-Date.now())/1000));if(label)label.textContent=`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')}`;if(seconds===0){if(submit)submit.disabled=false;notice.remove();clearInterval(timer)}};update();const timer=setInterval(update,1000)})();
     </script>
     @include('components.request-loading-overlay')
 </body>

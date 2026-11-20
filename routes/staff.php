@@ -10,9 +10,10 @@ use App\Http\Controllers\Staff\SupportController;
 use App\Http\Controllers\Staff\ShiftController;
 use App\Http\Controllers\Staff\MembershipCardDeliveryController;
 use App\Http\Middleware\EnsureActiveStaffShift;
+use App\Http\Middleware\EnforcePasswordResetRequired;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth','role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
+Route::middleware(['auth', EnforcePasswordResetRequired::class, 'role:staff,admin'])->prefix('staff')->name('staff.')->group(function(){
     Route::get('/shift', [ShiftController::class, 'show'])->name('shift');
     Route::post('/shift/open', [ShiftController::class, 'open'])->name('shift.open');
     Route::post('/shift/{shift}/close', [ShiftController::class, 'close'])->whereNumber('shift')->name('shift.close');
