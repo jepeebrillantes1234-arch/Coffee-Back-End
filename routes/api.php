@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
     Route::post('support/guest/conversations/{uuid}/messages', [SupportChatController::class, 'sendGuest'])->middleware('throttle:20,1');
     Route::get('support/guest/conversations/{uuid}/attachments/{message}', [SupportChatController::class, 'guestAttachment'])->middleware('throttle:60,1')->name('api.support.guest.attachment');
     Route::post('auth/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+    Route::post('auth/lockout-status', [AuthController::class, 'loginLockoutStatus'])->middleware('throttle:10,1');
     Route::post('auth/login',    [AuthController::class, 'login'])->middleware('throttle:10,1');
     Route::post('auth/google', [AuthController::class, 'googleLogin'])->middleware('throttle:10,1');
     Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:3,1');

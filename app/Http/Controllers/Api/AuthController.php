@@ -6,7 +6,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
-use Kreait\Firebase\Factory;
+use App\Services\FirebaseIdentityVerifier;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Storage;
@@ -29,18 +29,49 @@ class AuthController extends Controller
     {
         $requiresReset = $state['status'] === 'password_reset_required';
         $seconds = max(0, (int) ($state['retry_after_seconds'] ?? 0));
+        $duration = max(1, (int) ($state['lockout_duration_seconds'] ?? $seconds));
+        $minutes = max(1, (int) ceil($duration / 60));
+        $wait = $minutes === 1 ? '1 minute' : $minutes.' minutes';
         $message = $requiresReset
             ? 'A password reset is required before you can sign in.'
-            : 'Too many failed login attempts. Please wait 5 minutes before trying again.';
+            : 'Too many failed login attempts. Please wait '.$wait.' before trying again.';
         $metadata = ['security' => [
             'status' => $requiresReset ? 'password_reset_required' : 'locked',
             'retry_after_seconds' => $seconds,
+            'remaining_seconds' => $seconds,
             'locked_until' => $user->login_locked_until?->toIso8601String(),
+            'lockout_duration_seconds' => (int) ($state['lockout_duration_seconds'] ?? 0),
+            'lockout_cycle' => (int) ($state['lockout_cycle'] ?? $user->login_lockout_cycles),
             'password_reset_required' => $requiresReset,
         ]];
 
         return $this->fail($message, 429, null, $metadata)
             ->header('Retry-After', (string) $seconds);
+    }
+
+    /** Public, rate-limited status check. Unknown and unlocked identifiers share identical data. */
+    public function loginLockoutStatus(Request $request)
+    {
+        $validated = $request->validate(['login' => 'required|string|max:255']);
+        $identifier = trim($validated['login']);
+        $user = User::query()
+            ->where('username', strtolower($identifier))
+            ->orWhere('email', strtolower($identifier))
+            ->orWhere('phone', $identifier)
+            ->first();
+
+        $security = $user
+            ? app(AccountLoginSecurity::class)->currentLockout($user)
+            : [
+                'status' => 'available',
+                'retry_after_seconds' => 0,
+                'remaining_seconds' => 0,
+                'locked_until' => null,
+                'lockout_duration_seconds' => 0,
+                'lockout_cycle' => 0,
+            ];
+
+        return $this->ok(['security' => $security]);
     }
 
     // POST /api/v1/auth/register  (customer lang)
@@ -110,7 +141,11 @@ class AuthController extends Controller
     // POST /api/v1/auth/google: verify a Firebase Authentication ID token.
     public function googleLogin(Request $request)
     {
-        $request->validate(['id_token' => 'required|string|max:8192']);
+        $request->validate([
+            'id_token' => 'required|string|max:8192',
+            'provider' => 'sometimes|in:facebook',
+        ]);
+        $requestedProvider = $request->input('provider');
 
         $credentialsPath = config('services.firebase.credentials');
         if (!$credentialsPath) {
@@ -129,19 +164,35 @@ class AuthController extends Controller
         }
 
         try {
-            $auth = (new Factory())
-                ->withProjectId(config('services.firebase.project_id'))
-                ->withServiceAccount($resolvedCredentialsPath)
-                ->createAuth();
             $firebaseIdToken = $request->input('id_token');
-            $verifiedToken = $auth->verifyIdToken($firebaseIdToken, true);
-            $claims = $verifiedToken->claims();
-            $firebaseUid = (string) $claims->get('sub');
-            $email = strtolower((string) $claims->get('email'));
-            $emailVerified = $claims->get('email_verified', false) === true;
-            $name = trim((string) $claims->get('name', ''));
+            $identity = app(FirebaseIdentityVerifier::class)->verify(
+                $firebaseIdToken,
+                $resolvedCredentialsPath,
+                (string) config('services.firebase.project_id'),
+            );
+            $firebaseUid = $identity['uid'];
+            $email = $identity['email'];
+            $emailVerified = $identity['email_verified'];
+            $name = $identity['name'];
+            $signInProvider = $identity['sign_in_provider'];
 
-            if ($firebaseUid === '' || !filter_var($email, FILTER_VALIDATE_EMAIL) || !$emailVerified) {
+            if ($firebaseUid === '') {
+                return $this->fail('Firebase sign-in could not be verified. Please sign in again.', 401);
+            }
+            if ($requestedProvider === 'facebook' && $signInProvider !== 'facebook.com') {
+                Log::warning('Facebook authentication diagnostic', [
+                    'reason' => 'provider_claim_mismatch',
+                    'provider_claim' => $signInProvider === null || $signInProvider === ''
+                        ? 'missing'
+                        : 'other',
+                    'email_present' => $email !== '',
+                    'email_verified' => $emailVerified,
+                    'uid_linked' => User::where('firebase_uid', $firebaseUid)->exists(),
+                ]);
+                return $this->fail('Facebook sign-in could not be verified. Please try again.', 401);
+            }
+            if ($requestedProvider !== 'facebook'
+                && (!filter_var($email, FILTER_VALIDATE_EMAIL) || !$emailVerified)) {
                 return $this->fail('The Firebase account must have a verified email address.', 401);
             }
         } catch (\Throwable $e) {
@@ -153,6 +204,15 @@ class AuthController extends Controller
                 'exception_class' => $e::class,
                 'expired_error' => str_contains(strtolower($e->getMessage()), 'expired'),
             ]);
+            if ($requestedProvider === 'facebook') {
+                Log::warning('Facebook authentication diagnostic', [
+                    'reason' => 'firebase_token_verification_failed',
+                    'provider_claim' => 'missing',
+                    'email_present' => false,
+                    'email_verified' => false,
+                    'exception_class' => $e::class,
+                ]);
+            }
 
             if (!$diagnostics['audience_matches_project'] || !$diagnostics['issuer_matches_project']) {
                 return $this->fail(
@@ -171,9 +231,31 @@ class AuthController extends Controller
             return $this->fail('Firebase sign-in could not be verified. Please sign in again.', 401);
         }
 
+        // A Facebook identity with a verified Firebase UID already linked to a
+        // Laravel account is authoritative even when Firebase marks its email
+        // unverified. Email matching below remains restricted to verified email.
         $user = User::where('firebase_uid', $firebaseUid)->first();
         if (!$user) {
+            if ($requestedProvider === 'facebook'
+                && (!filter_var($email, FILTER_VALIDATE_EMAIL) || !$emailVerified)) {
+                Log::warning('Facebook authentication diagnostic', [
+                    'reason' => 'facebook_email_unverified_or_missing',
+                    'provider_claim' => 'facebook.com',
+                    'email_present' => $email !== '',
+                    'email_verified' => $emailVerified,
+                    'uid_linked' => false,
+                ]);
+                return $this->fail(
+                    'Use a verified email or link Facebook from your existing account before signing in.',
+                    401,
+                    null,
+                    ['auth_action' => 'facebook_email_verification_required'],
+                );
+            }
             $user = User::where('email', $email)->first();
+            if ($requestedProvider === 'facebook' && $user && $user->firebase_uid !== $firebaseUid) {
+                return $this->fail('This email is already associated with an existing account. Sign in using that account or contact support.', 409);
+            }
             if ($user && $user->firebase_uid && $user->firebase_uid !== $firebaseUid) {
                 return $this->fail('This email is already linked to a different Firebase account.', 409);
             }

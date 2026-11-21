@@ -47,11 +47,16 @@ class AccountLoginSecurityTest extends TestCase
         $this->from('/login')->post('/login', ['email' => $user->email, 'password' => 'wrong-two'])
             ->assertRedirect('/login');
 
-        $this->apiLogin($user, 'wrong-three')
+        $response = $this->apiLogin($user, 'wrong-three')
             ->assertStatus(429)
             ->assertJsonPath('data.security.status', 'locked')
-            ->assertJsonPath('data.security.retry_after_seconds', 300)
-            ->assertHeader('Retry-After', '300');
+            ->assertJsonPath('data.security.lockout_duration_seconds', 60)
+            ->assertJsonPath('data.security.lockout_cycle', 1);
+        $remaining = (int) $response->json('data.security.retry_after_seconds');
+        $this->assertGreaterThan(0, $remaining);
+        $this->assertLessThanOrEqual(60, $remaining);
+        $this->assertSame($remaining, (int) $response->json('data.security.remaining_seconds'));
+        $response->assertHeader('Retry-After', (string) $remaining);
 
         $this->assertSame(1, $user->fresh()->login_lockout_cycles);
     }
@@ -63,7 +68,7 @@ class AccountLoginSecurityTest extends TestCase
         $this->apiLogin($user, 'wrong-two')->assertUnauthorized();
         $this->apiLogin($user, 'wrong-three')->assertStatus(429);
 
-        $this->travel(5)->minutes();
+        $this->travel(1)->minutes();
         $this->apiLogin($user, 'Correct-password-123')
             ->assertOk()
             ->assertJsonPath('success', true);
@@ -76,6 +81,57 @@ class AccountLoginSecurityTest extends TestCase
         $this->assertCount(1, $user->tokens);
     }
 
+    public function test_progressive_lockout_durations_and_final_reset_requirement(): void
+    {
+        $user = $this->customer();
+        $durations = [60, 120, 300];
+
+        foreach ($durations as $index => $duration) {
+            $this->apiLogin($user, 'wrong-one')->assertUnauthorized();
+            $this->apiLogin($user, 'wrong-two')->assertUnauthorized();
+            $response = $this->apiLogin($user, 'wrong-three')
+                ->assertStatus(429)
+                ->assertJsonPath('data.security.status', 'locked')
+                ->assertJsonPath('data.security.lockout_duration_seconds', $duration)
+                ->assertJsonPath('data.security.lockout_cycle', $index + 1);
+            $remaining = (int) $response->json('data.security.retry_after_seconds');
+            $this->assertGreaterThan(0, $remaining);
+            $this->assertLessThanOrEqual($duration, $remaining);
+
+            $user->refresh();
+            $this->assertNotNull($user->login_locked_until);
+            $this->travel($duration)->seconds();
+        }
+
+        $this->apiLogin($user, 'wrong-after-final-lockout')
+            ->assertStatus(429)
+            ->assertJsonPath('data.security.status', 'password_reset_required')
+            ->assertJsonPath('data.security.password_reset_required', true);
+        $this->assertTrue($user->fresh()->password_reset_required);
+    }
+
+    public function test_status_endpoint_returns_active_lockout_and_hides_unknown_account_existence(): void
+    {
+        $locked = $this->customer();
+        $unlocked = $this->customer();
+        $this->apiLogin($locked, 'wrong-one')->assertUnauthorized();
+        $this->apiLogin($locked, 'wrong-two')->assertUnauthorized();
+        $this->apiLogin($locked, 'wrong-three')->assertStatus(429);
+
+        $this->postJson('/api/v1/auth/lockout-status', ['login' => $locked->email])
+            ->assertOk()
+            ->assertJsonPath('data.security.status', 'locked')
+            ->assertJsonPath('data.security.lockout_cycle', 1)
+            ->assertJsonPath('data.security.lockout_duration_seconds', 60)
+            ->assertJsonStructure(['data' => ['security' => ['locked_until', 'retry_after_seconds', 'remaining_seconds', 'lockout_duration_seconds', 'lockout_cycle']]]);
+
+        $known = $this->postJson('/api/v1/auth/lockout-status', ['login' => $unlocked->email])
+            ->assertOk()->json('data.security');
+        $unknown = $this->postJson('/api/v1/auth/lockout-status', ['login' => 'missing@example.test'])
+            ->assertOk()->json('data.security');
+        $this->assertSame($unknown, $known);
+    }
+
     public function test_three_lockout_cycles_force_reset_and_block_existing_credentials(): void
     {
         $user = $this->customer();
@@ -86,19 +142,18 @@ class AccountLoginSecurityTest extends TestCase
             'user_agent' => 'test', 'payload' => 'serialized', 'last_activity' => now()->timestamp,
         ]);
 
-        for ($cycle = 1; $cycle <= 3; $cycle++) {
+        foreach ([60, 120, 300] as $duration) {
             $this->apiLogin($user, 'wrong-one')->assertUnauthorized();
             $this->apiLogin($user, 'wrong-two')->assertUnauthorized();
-            $response = $this->apiLogin($user, 'wrong-three')->assertStatus(429);
-            if ($cycle < 3) {
-                $response->assertJsonPath('data.security.status', 'locked');
-                $this->travel(5)->minutes();
-            } else {
-                $response->assertJsonPath('data.security.status', 'password_reset_required')
-                    ->assertJsonPath('data.security.password_reset_required', true)
-                    ->assertJsonPath('data.security.retry_after_seconds', 0);
-            }
+            $this->apiLogin($user, 'wrong-three')->assertStatus(429)
+                ->assertJsonPath('data.security.status', 'locked')
+                ->assertJsonPath('data.security.lockout_duration_seconds', $duration);
+            $this->travel($duration)->seconds();
         }
+        $this->apiLogin($user, 'wrong-after-final-lockout')
+            ->assertStatus(429)
+            ->assertJsonPath('data.security.status', 'password_reset_required')
+            ->assertJsonPath('data.security.password_reset_required', true);
 
         $user->refresh();
         $this->assertTrue($user->password_reset_required);
